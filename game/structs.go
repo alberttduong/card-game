@@ -1,53 +1,77 @@
 package game 
 
 import (
-	"fmt"
+"fmt"
 	"errors"
 )
 
-type Cdata struct {
-	Hp int `json:"hp"`
-	Atk int `json:"atk"`
-}
+type CardName int
 
-
-type cardName string 
+//Order matters
+//go:generate stringer -type CardName
 const (
-	fireball cardName = "fireball"
-	wizard = "wizard"
-	goblin = "goblin"
-	poison = "poison"
-
+	Librarian CardName = iota
+	Magician
+	Shieldmancer
+	MindMage
+	Angel
+	Pyromancer
+	Bloodeater
+	Conjurer
+	Mortician
+	
 	MaxFieldLen = 3
 	MaxPlayers = 5
 )
 
-func CardFromName(d map[string]Cdata, n cardName) Card {
+type Attack struct {
+	Name string `json:"name"`
+	Dmg int `json:"dmg"`
+}
+
+type Cdata struct {
+	Name string `json:"name"`
+	Hp int `json:"hp"`
+	Atk1 Attack `json:"atk1"`	
+	Atk2 Attack `json:"atk2"`	
+}
+
+type Card struct {
+	name string
+	hp     int
+	atk1 Attack
+	atk2 Attack
+}
+
+func IsValidCardId(n int, cards []Cdata) bool {
+	return n > 0 && n < len(cards)
+}
+
+func CardFromName(cards []Cdata, n CardName) Card {
+	c := cards[int(n)]
 	return Card {
-		hp: 1,
-		atk: 2,
+		name: c.Name,
+		hp: c.Hp,
+		atk1: c.Atk1,
+		atk2: c.Atk2,
 	}
 }
 		
-type Card struct {
-	player playerID
-	hp     int
-	atk    int
-}
-
 type playerID int
 
 type Player struct {
 	id playerID
-	deck []cardName
-	hand []cardName
+	deck []CardName
+	hand []CardName
+	manaCap int
 }
 
 func InitPlayer(p playerID) Player {
 	return Player{
 		id:   p,
-		deck: []cardName{wizard, wizard},
-		hand: make([]cardName, 0, 7),
+		deck: []CardName{},
+		hand: make([]CardName, 0, 7),
+		manaCap: 1,
 	}
 }
 
@@ -58,10 +82,12 @@ func (p Player) String() string {
 
 type State struct {
 	numPlayers    int
-	players       [MaxPlayers]Player
+players       [MaxPlayers]Player
 	currentPlayer playerID
-	discard       [MaxPlayers][]cardName
+	discard       [MaxPlayers][]CardName
 	field         [MaxPlayers][]Card
+	Mana int
+	manaMax int
 }
 
 func InitState(players int) (State, error) {
@@ -76,23 +102,26 @@ func InitState(players int) (State, error) {
 		},
 		numPlayers: players,
 		currentPlayer: 0,
-		discard:       [MaxPlayers][]cardName{},
+		discard:       [MaxPlayers][]CardName{},
 		field: [MaxPlayers][]Card{
 			make([]Card, 0, MaxFieldLen),
 			make([]Card, 0, MaxFieldLen),
 			make([]Card, 0, MaxFieldLen),
 			make([]Card, 0, MaxFieldLen),
 		},
+		manaMax: 6,
 	}
-	return s, nil
+	return s.startTurn(), nil
 }
 
 func (s State) String() string {
 	return fmt.Sprintf(
 		"Current Player: %d\n" +
+		"mana: %d\n" +
 		"%v\n%v\n" + 
 		"Fields: %v\nDiscard: %v",
 		s.currentPlayer,
+		s.Mana,
 		s.players[0],
 		s.players[1],
 		s.field,

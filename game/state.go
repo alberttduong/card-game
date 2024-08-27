@@ -5,6 +5,15 @@ import (
 	"errors"
 )
 
+func (s State) startTurn() State {
+	mana := s.players[s.currentPlayer].manaCap
+	if mana < s.manaMax {
+		s.players[s.currentPlayer].manaCap++
+	}
+	s.Mana = mana
+	return s
+}
+
 func (s State) play(p playerID, c Card) (State, error) {
 	if len(s.field[p]) == MaxFieldLen {
 		return s, errors.New("Field is at max capacity")
@@ -35,7 +44,7 @@ func (s State) removeFromHand(p playerID, idx int) (State, error) {
 	return s, nil
 }
 
-func (s State) addToDiscard(p playerID, c cardName) State {
+func (s State) addToDiscard(p playerID, c CardName) State {
 	s.discard[p] = append(s.discard[p], c)
 	return s
 }
@@ -45,11 +54,13 @@ type target struct {
 	id  int
 }
 
-// int(cardName)
-func (s State) playSpell(spell cardName, defr target) State {
+// int(CardName)
+func (s State) playSpell(spell CardName, defr target) State {
 	switch spell {
+		/*
 	case fireball:
 		s.field[defr.pID][defr.id].hp -= 1
+		*/
 	default:
 		fmt.Println("no")
 	}
@@ -58,11 +69,29 @@ func (s State) playSpell(spell cardName, defr target) State {
 
 func (s State) endTurn() (State, error) {
 	s.currentPlayer = playerID(int(s.currentPlayer + 1) % s.numPlayers)
-	return s, nil
+	return s.startTurn(), nil
 }
 
-func (s State) attack(atkr target, defr target) State {
-	damage := s.field[atkr.pID][atkr.id].atk
-	s.field[defr.pID][defr.id].hp -= damage
+func (s State) setMana(n int) State {
+	s.Mana = n 
+	return s
+}
+
+type Attacker struct {
+	pID playerID
+	id int
+	usingAtk1 bool
+}
+
+func (s State) attack(atkr Attacker, defr target) State {
+	atkrCard := s.field[atkr.pID][atkr.id]
+	atk := atkrCard.atk1
+	
+	switch atk.Name {
+	case "draw1":
+		s, _ = s.drawCard(s.currentPlayer)
+	}
+
+	s.field[defr.pID][defr.id].hp -= atk.Dmg 
 	return s
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/alberttduong/card-game/game"
-	"github.com/bit101/go-ansi"
 	"fmt"
 	"bufio"
 	"os"
@@ -12,60 +11,70 @@ import (
 	_ "embed"
 )
 
-//go:embed card_data.json 
-
-var data []byte
-
-func GetCardData() map[string]game.Cdata {
-	var rawCards map[string]json.RawMessage
+func GetCardData(data []byte) []game.Cdata {
+	//var rawCards map[string]json.RawMessage
+	var rawCards []json.RawMessage
 	err := json.Unmarshal(data, &rawCards) 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var cards map[string]game.Cdata = make(map[string]game.Cdata)
-	for key := range rawCards {
+	cards := make([]game.Cdata, 30) 
+	for i, v := range rawCards {
 		var c game.Cdata
-		err := json.Unmarshal(rawCards[key], &c)
+		err := json.Unmarshal(v, &c)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		cards[key] = c
+		cards[i] = c
 	}
 	return cards	
 }
 
+func clearScreen() {
+	fmt.Print("\033[H\r")
+	fmt.Print("\033[2J\r")	
+}
+
+
+func ExecuteCommands (scan *bufio.Scanner, cards []game.Cdata, g game.State) (newG game.State, newOut []string) {
+	scan.Scan() 
+	input := scan.Text()
+
+	input = strings.Trim(input, "\n")
+
+	args := strings.Split(input, " ")
+
+	newG, newOut = g.Execute(cards, args...)
+	return
+}
+
+//go:embed cards.json 
+var data []byte
+
 func main() {
+	cards := GetCardData(data) 	
+
 	g, err := game.InitState(2)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	reader := bufio.NewReader(os.Stdin)
+	input := bufio.NewScanner(os.Stdin)
 
-	ansi.ClearScreen()
+	clearScreen()
 	fmt.Println(g)
 	fmt.Println()
 
 	var out []string
 	for {
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		input = strings.Trim(input, "\n")
-		if input == "q" {
-			ansi.ClearScreen()
+		if input.Text() == "q" {
+			clearScreen()
 			break
 		}
-
-		args := strings.Split(input, " ")
-		
-		g, out = game.Execute(g, args...)
-
-		ansi.ClearScreen()
+		g, out = ExecuteCommands(input, cards, g) 
+		clearScreen()
 		fmt.Println(g)
 		fmt.Println()
 		fmt.Println(out)
