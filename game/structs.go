@@ -1,14 +1,13 @@
-package game 
+package game
 
 import (
-"fmt"
 	"errors"
+	"fmt"
 )
 
 type CardName int
 
-//Order matters
-//go:generate stringer -type CardName
+// Order matters
 const (
 	Librarian CardName = iota
 	Magician
@@ -19,58 +18,119 @@ const (
 	Bloodeater
 	Conjurer
 	Mortician
-	
+	Protectio
+	PyrusBalio
+	Mortius
+	Enhancius
+	Dragonius
+	Cancelio
+	Conjorius
+	AngeliDustio
+	Vitalio
+	Dralio
+	Librarius
+	Aquarius
+	Bubublius
+	Meteorus
+	Armorius
+	DracusPyrio
+	Retrievio
+	Extractio
+
 	MaxFieldLen = 3
-	MaxPlayers = 5
+	MaxPermLen  = 7
+	MaxPlayers  = 5
 )
 
 type Attack struct {
 	Name string `json:"name"`
-	Dmg int `json:"dmg"`
+	Dmg  int    `json:"dmg"`
 }
 
 type Cdata struct {
+	Type string `json:"type"`
 	Name string `json:"name"`
-	Hp int `json:"hp"`
-	Atk1 Attack `json:"atk1"`	
-	Atk2 Attack `json:"atk2"`	
+	Hp   int    `json:"hp"`
+	Atk0 Attack `json:"atk1"`
+	Atk1 Attack `json:"atk2"`
 }
 
+type cardType int
+
+type Playable interface {
+	getType() cardType
+	getCost() int
+}
+
+const (
+	Wizard cardType = iota
+	Permanent
+	InstantSpell
+)
+
+// Should be named Wizard
 type Card struct {
 	name string
-	hp     int
+	hp   int
+	atk0 Attack
 	atk1 Attack
-	atk2 Attack
+
+	protected  bool
+	resistance bool
 }
 
-func IsValidCardId(n int, cards []Cdata) bool {
-	return n > 0 && n < len(cards)
+func (c Card) getType() cardType {
+	return Wizard 
 }
 
-func CardFromName(cards []Cdata, n CardName) Card {
-	c := cards[int(n)]
-	return Card {
-		name: c.Name,
-		hp: c.Hp,
-		atk1: c.Atk1,
-		atk2: c.Atk2,
-	}
+func (c Card) getCost() int {
+	return 0 
 }
-		
+
+type Perm struct {
+	name string
+	cost int
+}
+
+func (p Perm) getType() cardType {
+	return Permanent 
+}
+
+func (p Perm) getCost() int {
+	return p.cost 
+}
+
+type Instant struct {
+	name string
+	cost int
+}
+
+func (i Instant) getType() cardType {
+	return InstantSpell 
+}
+
+func (i Instant) getCost() int {
+	return i.cost 
+}
+
 type playerID int
 
 type Player struct {
-	id playerID
-	deck []CardName
-	hand []CardName
+	id      playerID
+	deck    []CardName
+	hand    []CardName
 	manaCap int
+
+	magicianHealth int
+	moreMana       bool
+	discountSpell  bool
 }
 
 func InitPlayer(p playerID) Player {
 	return Player{
-		id:   p,
-		deck: []CardName{},
-		hand: make([]CardName, 0, 7),
+		id:      p,
+		deck:    []CardName{},
+		hand:    make([]CardName, 0, 7),
 		manaCap: 1,
 	}
 }
@@ -80,14 +140,42 @@ func (p Player) String() string {
 		p.id, p.deck, p.hand)
 }
 
+type Await struct {
+	isTrue bool
+	atkr   target
+	spell bool
+	spellName string 
+}
+
 type State struct {
 	numPlayers    int
-players       [MaxPlayers]Player
+	players       [MaxPlayers]Player
 	currentPlayer playerID
 	discard       [MaxPlayers][]CardName
 	field         [MaxPlayers][]Card
-	Mana int
-	manaMax int
+	perms         [MaxPlayers][]Perm
+	
+	Mana          int
+	manaMax       int
+	useMana bool
+
+	awaiting Await
+}
+
+func initArea[T Playable](pType T, numPlayers int) [MaxPlayers][]T {
+	var maxLen int
+	switch pType.getType() {
+	case Wizard:
+		maxLen = MaxFieldLen
+	case Permanent:
+		maxLen = MaxPermLen
+	}
+
+	area := [MaxPlayers][]T{}
+	for i := 0; i < numPlayers; i++ {
+		area[i] = make([]T, 0, maxLen)
+	}
+	return area
 }
 
 func InitState(players int) (State, error) {
@@ -100,26 +188,34 @@ func InitState(players int) (State, error) {
 			InitPlayer(0),
 			InitPlayer(1),
 		},
-		numPlayers: players,
+		numPlayers:    players,
 		currentPlayer: 0,
 		discard:       [MaxPlayers][]CardName{},
-		field: [MaxPlayers][]Card{
-			make([]Card, 0, MaxFieldLen),
-			make([]Card, 0, MaxFieldLen),
-			make([]Card, 0, MaxFieldLen),
-			make([]Card, 0, MaxFieldLen),
-		},
+		field:         initArea(Card{}, players),
+		perms:   initArea(Perm{}, players),
 		manaMax: 6,
+		useMana: false,
 	}
 	return s.startTurn(), nil
 }
 
+func InitStateUsingMana(players int) (State, error) {
+	s, err := InitState(players)
+	if err != nil {
+		return State{}, err
+	}
+	s.useMana = true
+	return s, nil
+}
+
 func (s State) String() string {
 	return fmt.Sprintf(
-		"Current Player: %d\n" +
-		"mana: %d\n" +
-		"%v\n%v\n" + 
-		"Fields: %v\nDiscard: %v",
+		"Await: %v\n"+
+			"Current Player: %d\n"+
+			"mana: %d\n"+
+			"%v\n%v\n"+
+			"Fields: %v\nDiscard: %v",
+		s.awaiting,
 		s.currentPlayer,
 		s.Mana,
 		s.players[0],
@@ -127,8 +223,4 @@ func (s State) String() string {
 		s.field,
 		s.discard,
 	)
-}
-
-func (s State) Title() string {
-	return fmt.Sprintf("%d", s.currentPlayer)
 }

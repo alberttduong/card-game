@@ -19,7 +19,7 @@
 			"dmg": 2
 		},
 		"atk2": {
-			"name": "disappear",
+			"name": "disappear2",
 			"dmg": 6
 		}
 	},
@@ -68,7 +68,7 @@
 		},
 		"atk2": {
 			"name": "megaSplash",
-			"dmg": 1
+			"dmg": 0
 		}
 	},
 	{
@@ -87,7 +87,7 @@
 		"name": "Conjurer",
 		"hp": 8,
 		"atk1": {
-			"name": "plusMana",
+			"name": "moreMana",
 			"dmg": 1
 		},
 		"atk2": {
@@ -109,6 +109,92 @@
 	},
 	{
 		"name": "Protectio",
-		"cost": 5
+		"type": "instant",
+		"hp": 5
+	},
+	{
+		"name": "Pyrus Balio",
+		"type": "instant",
+		"hp": 1
+	},
+	{
+		"name": "Mortius",
+		"type": "perm",
+		"hp": 1
+	},
+	{
+		"name": "Enhancius",
+		"type": "perm",
+		"hp": 3
+	},
+	{
+		"name": "Dragonius",
+		"type": "perm",
+		"hp": 5
+	},
+	{
+		"name": "Cancelio",
+		"type": "instant",
+		"hp": 3
+	},
+	{
+		"name": "Conjorius",
+		"type": "perm",
+		"hp": 3
+	},
+	{
+		"name": "Angeli Dustio",
+		"type": "instant",
+		"hp": 3
+	},
+	{
+		"name": "Vitalio",
+		"type": "perm",
+		"hp": 1
+	},
+	{
+		"name": "Dralio",
+		"type": "instant",
+		"hp": 2
+	},
+	{
+		"name": "Librarius",
+		"type": "perm",
+		"hp": 3
+	},
+	{
+		"name": "Aquarius",
+		"type": "perm",
+		"hp": 3
+	},
+	{
+		"name": "Bubublius",
+		"type": "perm",
+		"hp": 1
+	},
+	{
+		"name": "Meteorus",
+		"type": "perm",
+		"hp": 1
+	},
+	{
+		"name": "Armorius",
+		"type": "perm",
+		"hp": 3
+	},
+	{
+		"name": "Dracus Pyrio",
+		"type": "instant",
+		"hp": 5
+	},
+	{
+		"name": "Retrievio",
+		"type": "instant",
+		"hp": 1
+	},
+	{
+		"name": "Extractio",
+		"type": "instant",
+		"hp": 1
 	}
 ]

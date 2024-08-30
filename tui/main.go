@@ -37,7 +37,6 @@ func clearScreen() {
 	fmt.Print("\033[2J\r")	
 }
 
-
 func ExecuteCommands (scan *bufio.Scanner, cards []game.Cdata, g game.State) (newG game.State, newOut []string) {
 	scan.Scan() 
 	input := scan.Text()
@@ -65,7 +64,7 @@ func main() {
 
 	clearScreen()
 	fmt.Println(g)
-	fmt.Println()
+	fmt.Println()	
 
 	var out []string
 	for {
