@@ -3,6 +3,7 @@ package game
 import (
 	"errors"
 	"fmt"
+	"slices"
 )
 
 const (
@@ -11,6 +12,8 @@ const (
 	DisappearRecoil = 2
 	AllyRecoil = 1
 	PyrusBalioDmg = 1
+	EnhanciusBuff = 2
+	DragoniusDmg = 3
 )
 
 func test() {
@@ -71,6 +74,27 @@ func CardFromName(cards []Cdata, n CardName) Playable {
 	}
 }
 
+func (s State) playPerm(player playerID, p Perm) (State, error) {
+	switch p.name {
+	case "Mortius", "Enhancius":
+		s = s.awaitSpell(p)
+	case "Dragonius":
+		p.card = Card{	
+			name: "Dragonius",
+			hp: 3,
+			atk0: Attack{
+				Name: "Dragon Breath",
+				Dmg: 3,
+			},
+		}
+	case "Aquarius":
+	default:
+		return s, errors.New("unexpected perm")
+	}
+	s.perms[player] = append(s.perms[player], p) 
+	return s, nil
+}
+
 func (s State) play(p playerID, c Playable) (State, error) {
 	cardType := c.getType()
 
@@ -96,7 +120,7 @@ func (s State) play(p playerID, c Playable) (State, error) {
 
 	switch cardType {
 	case Permanent:
-		s.perms[p] = append(s.perms[p], c.(Perm))
+		return s.playPerm(p, c.(Perm))
 	case InstantSpell:
 		return s.playInstant(c.(Instant))
 	}
@@ -104,10 +128,18 @@ func (s State) play(p playerID, c Playable) (State, error) {
 }
 
 func (s State) playInstant(spell Instant) (State, error) {
-	switch spell.name {
-	case "Pyrus Balio":
+	spellsThatAwait := []string{"Pyrus Balio", "Protectio", "Cancelio"}   
+
+	if slices.Contains(spellsThatAwait, spell.name) {
 		return s.awaitSpell(spell), nil
 	}
+	switch spell.name {
+	case "Dralio":
+		s, _ = s.drawCard(s.currentPlayer)
+		s, err := s.drawCard(s.currentPlayer)
+		return s, err	
+	}
+
 	return s, errors.New("Invalid instant")
 }
 
@@ -148,6 +180,11 @@ type target struct {
 
 func (s State) endTurn() (State, error) {
 	s.currentPlayer = playerID(int(s.currentPlayer+1) % s.numPlayers)
+	for _, permField := range s.perms {
+		for i, _ := range permField {
+			permField[i].activated = false	
+		}
+	}
 	return s.startTurn(), nil
 }
 
@@ -156,108 +193,54 @@ func (s State) setMana(n int) State {
 	return s
 }
 
-func (s State) attack(atkr target, defr target) (State, error) {
-	if err := s.checkTarget(atkr); err != nil {
+func (s State) attack(atkr, defr target) (State, error) {
+	atkrCard, err := s.cardFromTarget(atkr)
+	if err != nil { 
 		return s, err
 	}
-	if err := s.checkTarget(defr); err != nil {
+
+	defrCard, err := s.cardFromTarget(defr)
+	if err != nil { 
 		return s, err
 	}
 
-	atkrCard := s.field[atkr.pID][atkr.id]
-	defrCard := &s.field[defr.pID][defr.id]
-	atk := atkrCard.atk0
-	if atkr.atkNum == 1 {
-		atk = atkrCard.atk1
-	}
-
-	dmg := atk.Dmg
-	switch atk.Name {
-	case "draw1":
-		s, _ = s.drawCard(s.currentPlayer)
-	case "dmgPerCard":
-		dmg = len(s.players[atkr.pID].hand) / CardPerDmg 
-	case "heal":
-		// maxHP
-		if defrCard.hp == MaxHp {
-			dmg = 0
+	atk, err := atkrCard.atk(atkr.atkNum)
+	if errors.Is(err, DragoniusAtkErr{}) {
+		dragon, _ := s.permFromTarget(atkr)
+		if dragon.activated == true {
+			return s, errors.New("attack with dragon only once per turn")
 		}
-	case "revive":
-		s = s.setAwait(atkr)
-	case "disappear":
-		s.players[s.currentPlayer].magicianHealth = atkrCard.hp
-		h := s.players[s.currentPlayer].hand
-		s.players[s.currentPlayer].hand = append(h, Magician)
-	case "disappear2":
-		newHp := atkrCard.hp - DisappearRecoil 
-		s.players[s.currentPlayer].magicianHealth = newHp
-		if newHp > 0 {
-			h := s.players[s.currentPlayer].hand
-			s.players[s.currentPlayer].hand = append(h, Magician)
-		}
-	case "splash":
-		s = s.DoDmg(int(defr.pID), (defr.id+1)%3, dmg)
-		s = s.DoDmg(int(defr.pID), (defr.id+2)%3, dmg)
-	case "megaSplash":
-		for p := 0; p < s.numPlayers; p++ {
-			for i := 0; i < 3; i++ {
-				if p == int(atkr.pID) {
-					continue
-				}
-
-				if s.checkTarget(
-					target{
-						pID: playerID(p),
-						id:  i,
-					}) != nil {
-					continue
-				}
-
-				s = s.DoDmg(p, i, 1)
-			}
-		}
-	case "protect":
-		protect := func(c *Card) {
-			c.protected = true
-		}
-
-		s.applyToAllies(protect, atkr)
-	case "reduce":
-		setResistance := func(c *Card) {
-			c.resistance = true
-		}
-		s.applyToAllies(setResistance, atkr)
-	case "moreMana":
-		s.players[atkr.pID].moreMana = true
-	case "nextDiscount":
-		s.players[atkr.pID].discountSpell = true
-	case "hurtAllies":
-		hurt := func(c *Card) {
-			s.DoDmgToCard(c, AllyRecoil)
-		}
-		s.applyToAllies(hurt, atkr)
-	case "double":
-		areDead := func(c *Card) bool {
-			return c.hp < 1
-		}
-		if s.allAllies(areDead, atkr) {
-			dmg *= 2
-		}
-	case "bypass":
-		s = s.doRawDmg(defrCard, dmg)
-		return s, nil
-	case "removePerm":
+		dragon.activated = true
 		return s.setAwait(atkr), nil 
-	case "attackTwice":
-		s = s.setAwait(atkr)
+	}
+	if err != nil {
+		return s, err
+	}
+
+
+	sideEffect, ok := atkSideEffects[atk.Name]	
+	if ok {
+		s = sideEffect(s, atkr, defr)
+	}
+
+	dmg := s.baseDamage(atkr, atk)
+
+	if atk.Name == "bypass" {
+	 	s = s.doRawDmg(defrCard, dmg)
+		return s, nil
 	}
 
 	defrWasAlive := defrCard.hp > 0
 
-	s = s.DoDmg(int(defr.pID), defr.id, dmg)
+	s = s.DoDmgToCard(defrCard, dmg)
 
-	if atk.Name == "frenzy" && defrWasAlive && defrCard.hp == 0 {
-		s = s.setAwait(atkr)
+	if defrWasAlive && defrCard.hp == 0 {
+		if atk.Name == "frenzy" {
+			s = s.setAwait(atkr)
+		}
+		if defrCard.attached == "Mortius" {
+			s = s.DoDmgToCard(atkrCard, 2)
+		}
 	}
 
 	return s, nil
@@ -266,10 +249,11 @@ func (s State) attack(atkr target, defr target) (State, error) {
 func (s State) allAllies(f func(*Card) bool, t target) bool {
 	for i := 0; i < MaxFieldLen - 1; i++ {
 		fId := (t.id + 1 + i) % MaxFieldLen 
-		if s.checkTarget(target{pID: t.pID, id: fId}) != nil {
+		card, err := s.cardFromTarget(target{pID: t.pID, id: fId})
+		if err != nil {
 			continue
 		}
-		if f(&s.field[t.pID][fId]) == false {
+		if f(card) == false {
 			return false
 		}
 	}
@@ -277,16 +261,17 @@ func (s State) allAllies(f func(*Card) bool, t target) bool {
 }
 
 func (s State) applyToAllies(f func(*Card), t target) {
-	for i := 0; i < 2; i++ {
-		fId := (t.id + 1 + i) % 3
-		if s.checkTarget(target{pID: t.pID, id: fId}) != nil {
+	for i := 0; i < MaxFieldLen - 1; i++ {
+		fId := (t.id + 1 + i) % MaxFieldLen
+		card, err := s.cardFromTarget(target{pID: t.pID, id: fId})
+		if err != nil {
 			continue
-		}
-		f(&s.field[t.pID][fId])
+		}	
+		f(card)
 	}
 }
 
-func (g State) DoDmg(p int, id int, dmg int) State {
+func (g State) DoDmg(p, id, dmg int) State {
 	return g.DoDmgToCard(&g.field[p][id], dmg)
 }
 
@@ -326,20 +311,67 @@ func (s State) expectedTargetType() cardType {
 		"removePerm",
 	}
 
-	for _, v := range targetsPerm {
-		if name == v {
-			return Permanent 
-		}
+	if slices.Contains(targetsPerm, name) {
+		return Permanent
 	}
 
 	return Wizard 
 }
 	
+func (s State) cardFromTarget(t target) (*Card, error) {
+	if err := s.checkTarget(t); err != nil {
+		return nil, err
+	}
+	if t.area == Permanent {
+		p := &s.perms[t.pID][t.id]
+		if p.name == "Dragonius" {
+			return &p.card, nil
+		}
+		return nil, errors.New("perm is not a valid target")
+	}
+		
+	if t.area != Wizard {
+		return nil, errors.New("Unexpected area in target")
+	}
+	return &s.field[t.pID][t.id], nil
+}
+
+func (s State) permFromTarget(t target) (*Perm, error) {
+	if err := s.checkTarget(t); err != nil {
+		return nil, err
+	}
+	if t.area != Permanent {
+		return nil, errors.New("Target not a valid perm")
+	}
+	return &s.perms[t.pID][t.id], nil
+}
 
 func (s State) spellTarget(defr target) (State, error) {
 	switch s.awaiting.spellName {
 	case "Pyrus Balio":
 		return s.DoDmg(int(defr.pID), defr.id, PyrusBalioDmg), nil
+	case "Protectio":
+		c, err := s.cardFromTarget(defr)	
+		if err != nil {
+			return s, err
+		}
+		c.protected = true 
+		return s, nil 
+	// Attach
+	case "Mortius", "Enhancius":
+		c, err := s.cardFromTarget(defr)	
+		if err != nil {
+			return s, err
+		}
+		c.attached = s.awaiting.spellName 
+		return s, nil
+	case "Cancelio":
+		p, err := s.permFromTarget(defr)
+		if err != nil {
+			return s, err
+		}
+		*p = Perm{} 
+		return s, nil
 	}
 	return s, errors.New("awaiting invalid spell name")
 }
@@ -363,11 +395,23 @@ func (s State) target(defr target) (State, error) {
 
 
 	atkr := s.awaiting.atkr
-	atkrCard := &s.field[atkr.pID][atkr.id]
+	atkrCard, err := s.cardFromTarget(atkr) 
+	if err != nil {
+		return s, err
+	}
 
-	atk := atkrCard.atk0
-	if atkr.atkNum == 1 {
-		atk = atkrCard.atk1
+	defrCard, wrongTargetError := s.cardFromTarget(defr) 
+	atk, err := atkrCard.atk(atkr.atkNum)
+
+	if errors.Is(err, DragoniusAtkErr{}) {
+		if wrongTargetError != nil {
+			return s, errors.New("invalid target")
+		}
+		s = s.cancelAwait()
+		return s.DoDmgToCard(defrCard, DragoniusDmg), nil
+	}
+	if err != nil {
+		return s, err
 	}
 
 	if targetType == Permanent {
@@ -379,7 +423,6 @@ func (s State) target(defr target) (State, error) {
 	}
 
 
-	defrCard := &s.field[defr.pID][defr.id]
 	switch atk.Name {
 	case "revive":
 		atkrCard.hp = 0
@@ -391,7 +434,10 @@ func (s State) target(defr target) (State, error) {
 	case "frenzy":
 		defrWasAlive := defrCard.hp > 0
 
-		s = s.DoDmg(int(defr.pID), defr.id, atk.Dmg)
+		s, err := s.attack(atkr, defr)	
+		if err != nil {
+			return s, nil
+		}
 
 		if defrWasAlive && defrCard.hp == 0 {
 			return s, nil
@@ -410,11 +456,11 @@ func (s State) setAwait(a target) State {
 	return s
 }
 
-func (s State) awaitSpell(spell Instant) State {
+func (s State) awaitSpell(spell Playable) State {
 	s.awaiting = Await{
 		isTrue: true,
 		spell: true,
-		spellName: spell.name, 
+		spellName: spell.getName(), 
 	}
 	return s
 }
@@ -422,4 +468,18 @@ func (s State) awaitSpell(spell Instant) State {
 func (s State) cancelAwait() State {
 	s.awaiting = Await{}
 	return s
+}
+
+func (c Card) atk(n int) (Attack, error) {
+	if c.name == "Dragonius" {
+		return Attack{}, DragoniusAtkErr{} 
+	}
+	
+	if n != 0 && n != 1 {
+		panic("invalid atk number")
+	}
+	if n == 1 {
+		return c.atk1, nil
+	}
+	return c.atk0, nil
 }

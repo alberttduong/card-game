@@ -60,6 +60,7 @@ type cardType int
 type Playable interface {
 	getType() cardType
 	getCost() int
+	getName() string
 }
 
 const (
@@ -77,6 +78,7 @@ type Card struct {
 
 	protected  bool
 	resistance bool
+	attached   string
 }
 
 func (c Card) getType() cardType {
@@ -87,9 +89,15 @@ func (c Card) getCost() int {
 	return 0 
 }
 
+func (c Card) getName() string {
+	return c.name 
+}
+
 type Perm struct {
 	name string
 	cost int
+	card Card
+	activated bool
 }
 
 func (p Perm) getType() cardType {
@@ -98,6 +106,10 @@ func (p Perm) getType() cardType {
 
 func (p Perm) getCost() int {
 	return p.cost 
+}
+
+func (p Perm) getName() string {
+	return p.name 
 }
 
 type Instant struct {
@@ -111,6 +123,10 @@ func (i Instant) getType() cardType {
 
 func (i Instant) getCost() int {
 	return i.cost 
+}
+
+func (i Instant) getName() string {
+	return i.name 
 }
 
 type playerID int

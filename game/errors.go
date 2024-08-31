@@ -39,3 +39,11 @@ func (g State) checkTarget(t target) error {
 
 	return errors.New("unexpected card type")
 }
+
+type DragoniusAtkErr struct {
+}
+
+func (d DragoniusAtkErr) Error() string {
+	return "Tried to attack with Dragonius"
+}
+

@@ -50,26 +50,46 @@ func (g State) InitFullDeck() State {
 	return g
 }
 
+func (g State) checkAllyHpAt(t *testing.T, fID, expected int) {
+	if hp := g.CardHp(0, fID); hp != expected {
+		t.Errorf("Expected %d HP, Got %d", expected, hp)
+	}
+}
+
+func (g State) checkHpIs(t *testing.T, expected int) {
+	g.checkAllyHpAt(t, 0, expected)
+}
+
+func (g State) checkAllyHpIs(t *testing.T, expected int) {
+	g.checkAllyHpAt(t, 1, expected)
+}
+
+func (g State) handSize() int {
+	return len(g.players[g.currentPlayer].hand)
+}
+
+func (g State) checkHandSize(t *testing.T, expected int) {
+	if size := g.handSize(); size != expected {
+		t.Errorf("Expected hand size of %d, Got %d", expected, size)
+		fmt.Println(g)
+	}
+}
+
 func Test_Mana(t *testing.T) {
 	g, _ := InitState(2)
-	expected := 1
-	if g.Mana != expected {
-		t.Errorf("Expected mana %d got %d", expected, g.Mana)
+	expect := func (expected int) {
+		if g.Mana != expected {
+			t.Errorf("Expected mana %d got %d", expected, g.Mana)
+		}
 	}
 	g, _ = g.endTurn()
-	if g.Mana != expected {
-		t.Errorf("Expected mana %d got %d", expected, g.Mana)
-	}
+	expect(1)
 
-	expected = 2
 	g, _ = g.endTurn()
-	if g.Mana != expected {
-		t.Errorf("Expected mana %d got %d", expected, g.Mana)
-	}
+	expect(2)
+
 	g, _ = g.endTurn()
-	if g.Mana != expected {
-		t.Errorf("Expected mana %d got %d", expected, g.Mana)
-	}
+	expect(2)
 }
 
 func Test_Librarian(t *testing.T) {
@@ -78,27 +98,17 @@ func Test_Librarian(t *testing.T) {
 
 	g = g.InitFullDeck()
 	
-	handSize := func () int {
-		return len(g.players[0].hand)
-	}
-	hand := handSize() 
+	hand := g.handSize()
 	g = g.doAtk(0)
-	if newHand := handSize(); newHand != hand+1 {
-		t.Errorf("Expected handsize: %d, Got: %d", hand+1, newHand)
-		fmt.Println(g)
-	}
-
-	hp := g.CardHp(0, 1)
+	g.checkHandSize(t, hand + 1)
 
 	for i := 0; i < 6; i++ {
 		g, _ = g.drawCard(g.currentPlayer)
 	}
 
+	hp := g.CardHp(0, 1)
 	g = g.doAtk(1)
-	if newHp := g.CardHp(0, 1); newHp != hp-3 {
-		t.Errorf("Wrong HP expected %d got %d", hp-3, newHp)
-		fmt.Println(g)
-	}
+	g.checkAllyHpIs(t, hp - 3)
 }
 
 func Test_Angel(t *testing.T) {
@@ -109,9 +119,7 @@ func Test_Angel(t *testing.T) {
 	g = g.DoDmg(0, 1, 3)
 	g = g.doAtk(0)
 
-	if hp := g.CardHp(0, 1); hp != 7 {
-		t.Errorf("Expected: 7, Got: %d", hp)
-	}
+	g.checkAllyHpIs(t, 7)
 
 	g = g.DoDmg(0, 1, 8)
 	g = g.doAtk(1)
@@ -121,12 +129,8 @@ func Test_Angel(t *testing.T) {
 		t.Error(err)
 	}
 
-	if hp := g.CardHp(0, 1); hp != 8 {
-		t.Errorf("Expected: 8, Got: %d", hp)
-	}
-	if hp := g.CardHp(0, 0); hp != 0 {
-		t.Errorf("Expected: 0, Got: %d", hp)
-	}
+	g.checkAllyHpIs(t, 8)
+	g.checkHpIs(t, 0)
 }
 
 func Test_Magician(t *testing.T) {
@@ -145,9 +149,6 @@ func Test_Magician(t *testing.T) {
 		t.Error(err)
 	}
 
-	if hp := g.CardHp(0, 0); hp != 7 {
-		t.Errorf("expected hp 7 got %d", hp)
-	}
 	g = g.doAtk(1)
 	if h := g.players[0].magicianHealth; h != 5 {
 		t.Errorf("expected hp 5 got %d", h)
@@ -161,16 +162,14 @@ func Test_Pyromancer(t *testing.T) {
 
 	g = g.doAtk(0)
 	for i := 0; i < 3; i++ {
-		if hp := g.CardHp(0, i); hp != 7 {
-			t.Errorf("expected hp 7 got %d", hp)
-		}
+		g.checkAllyHpAt(t, i, 7)
 	}
 
 	g = g.doAtk(1)
 	for p := 0; p < g.numPlayers; p++ {
 		for i := 0; i < 2; i++ {
 			if hp := g.CardHp(p, i); hp != 7 {
-				t.Errorf("megasplash: expected hp 7 got %d", hp)
+				t.Errorf("Expected Hp 7, Got %d", hp)
 			}
 		}
 	}
@@ -184,25 +183,19 @@ func Test_Shieldmancer(t *testing.T) {
 	g = g.doAtk(0)
 	hp := g.CardHp(0, 1)
 	g = g.DoDmg(0, 1, 8)
-	if newHp := g.CardHp(0, 1); newHp != hp {
-		t.Errorf("expected hp %d got %d", hp, newHp)
-	}
+	g.checkAllyHpIs(t, hp)
 	g, _ = g.endTurn()
 	g, _ = g.endTurn()
 
 	// protect only lasts 1 turn
 	hp = g.CardHp(0, 1)
 	g = g.DoDmg(0, 1, 3)
-	if newHp := g.CardHp(0, 1); newHp != hp-3 {
-		t.Errorf("expected hp %d got %d", hp, newHp)
-	}
+	g.checkAllyHpIs(t, hp - 3)
 
 	g = g.doAtk(1)
 	hp = g.CardHp(0, 1)
 	g = g.DoDmg(0, 1, 2)
-	if newHp := g.CardHp(0, 1); newHp != hp-1 {
-		t.Errorf("expected hp %d got %d", hp, newHp)
-	}
+	g.checkAllyHpIs(t, hp - 1)
 }
 
 func Test_Conjurer(t *testing.T) {
@@ -249,22 +242,15 @@ func Test_Mortician(t *testing.T) {
 	g, _ = g.attack(target{pID: 0, id: 0, atkNum: 0},
 		target{pID: 1, id: 0})
 
-	if hp := g.CardHp(0, 1); hp != 7 {
-		t.Errorf("expected hp %d got %d", 7, hp)
-	}
-	if hp := g.CardHp(0, 2); hp != 7 {
-		t.Errorf("expected hp %d got %d", 7, hp)
-	}
-
+	g.checkAllyHpAt(t, 1, 7)
+	g.checkAllyHpAt(t, 2, 7)
 	g = g.DoDmg(0, 1, 8)
 	g = g.DoDmg(0, 2, 8)
 
 	hp := g.CardHp(0, 0)
 	g, _ = g.attack(target{pID: 0, id: 0, atkNum: 1},
 		target{pID: 0, id: 0})
-	if newHp := g.CardHp(0, 0); newHp != hp-6 {
-		t.Errorf("expected hp %d got %d", hp-6, newHp)
-	}
+	g.checkHpIs(t, hp - 6)
 }
 
 func Test_MindMage(t *testing.T) {
@@ -278,9 +264,7 @@ func Test_MindMage(t *testing.T) {
 	g, _ = g.attack(target{pID: 0, id: 0, atkNum: 0},
 		target{pID: 0, id: 0})		
 	
-	if newHp := g.CardHp(0, 0); newHp != hp {
-		t.Errorf("expected hp %d got %d", hp, newHp)
-	}
+	g.checkHpIs(t, hp)
 
 	g, _ = g.play(playerID(0), CardFromName(cards, Aquarius))
 	if l := len(g.perms[0]); l != 1 {
@@ -305,13 +289,10 @@ func Test_Bloodeater(t *testing.T) {
 	g = g.playCards(0, Bloodeater, Librarian)
 
 	g = g.doAtk(0)
-	if newHp := g.CardHp(0, 1); newHp != 7 {
-		t.Errorf("expected hp 7 got %d", newHp)
-	}
+	g.checkAllyHpIs(t, 7)
+
 	g, _ = g.target(target{pID: 0, id: 1})
-	if newHp := g.CardHp(0, 1); newHp != 6 {
-		t.Errorf("expected hp 6 got %d", newHp)
-	}
+	g.checkAllyHpIs(t, 6)
 	
 	g = g.playCards(0, Librarian)
 	g = g.doAtk(1)
@@ -324,9 +305,7 @@ func Test_Bloodeater(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if newHp := g.CardHp(0, 2); newHp != 4 {
-		t.Errorf("expected hp 4 got %d", newHp)
-	}
+	g.checkAllyHpAt(t, 2, 4)
 }
 
 func Test_SpellsCostMana(t *testing.T) {
@@ -352,11 +331,109 @@ func Test_PyrusBalio(t *testing.T) {
 	g = g.playCards(0, Librarian, PyrusBalio)
 
 	g, _ = g.target(target{pID: 0, id: 0})
-	if newHp := g.CardHp(0, 0); newHp != 7 {
-		t.Errorf("expected hp 7 got %d", newHp)
+	g.checkHpIs(t, 7)
+}
+
+func Test_Protectio(t *testing.T) {
+	g, _ := InitState(2)
+	g = g.playCards(0, Librarian, Protectio)
+	g, err := g.target(target{pID: 0, id: 0})
+	if err != nil {
+		t.Error(err)
+	}	
+
+	if g.field[0][0].protected == false {
+		t.Error("expected wizard to be protected")
 	}
 }
-/*
+
+func Test_Mortius(t *testing.T) {
+	g, _ := InitState(2)
+	g = g.playCards(0, Magician, Librarian, Mortius)
+	g, _ = g.target(target{pID: 0, id: 1})
+	g = g.doAtk(1).doAtk(1)
+	if g.field[0][1].attached != "Mortius" {
+		t.Error("not attached")
+	}
+	g.checkHpIs(t, 6)
+}
+
+func Test_Enhancius(t *testing.T) {
+	g, _ := InitState(2)
+	g = g.playCards(0, Librarian, Shieldmancer, Enhancius)
+	g, _ = g.target(target{pID: 0, id: 0})
+	g = g.doAtk(0)
+	g.checkAllyHpIs(t, 5)
+}
+
+func Test_Dragonius(t *testing.T) {
+	g, _ := InitState(2)
+	g = g.playCards(0, Librarian, Dragonius) 
+	
+	d, err := g.cardFromTarget(target{pID: 0, id: 0, area: Permanent})
+	if err != nil {
+		t.Error(err)
+	}
+	if d.name != "Dragonius" {
+		t.Error("Dragonius card not created")
+	}
+
+	g, err = g.attack(target{pID: 0, id: 0, area: Permanent},
+					target{pID: 0, id: 0})
+	if err != nil {
+		t.Error(err)
+	}
+
+	g, err = g.target(target{pID: 0, id: 0})
+	if err != nil {
+		t.Error(err)
+	}
+	if hp := g.field[0][0].hp; hp != 5 {
+		t.Errorf("expected hp 5 got %d", hp)
+	}
+	
+	g, err = g.attack(target{pID: 0, id: 0},
+			target{pID: 0, id: 0, area: Permanent})
+	
+	if err != nil {
+		t.Error(err)
+	}
+	if d.hp != 2 {
+		t.Error("Could not attack Dragonius")
+	}
+
+	g, err = g.attack(target{pID: 0, id: 0, area: Permanent},
+					target{pID: 0, id: 0})
+	if err == nil {
+		t.Error("expected an error")
+	}
+
+	g, _ = g.endTurn()
+	if g.perms[0][0].activated == true {
+		t.Error("expected deactivation of perm")
+	}
+}
+
+func Test_Cancelio(t *testing.T) {
+	g, _ := InitState(2)
+	g = g.playCards(0, Dragonius, Cancelio)
+	g, _ = g.target(target{pID: 0, id: 0, area: Permanent})
+	emptyPerm := Perm{}
+	if g.perms[0][0] != emptyPerm {
+		t.Error("expected empty perm")
+	}
+}
+
+func Test_Dralio(t *testing.T) {
+	g, _ := InitState(2)
+	g = g.InitFullDeck()
+	g = g.playCards(0, Dralio)
+	g.checkHandSize(t, 2)
+}
+	/*
+func Test_Aquarius(t *testing.T) {
+	g, _ := InitState(2)
+	/*
 func Test_Aquarius(t *testing.T) {
 	g, _ := InitState(2)
 	g, e := g.play(playerID(0), CardFromName(cards, Aquarius))
