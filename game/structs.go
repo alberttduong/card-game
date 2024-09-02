@@ -3,6 +3,8 @@ package game
 import (
 	"errors"
 	"fmt"
+	"log"
+	"bytes"
 )
 
 type CardName int
@@ -26,7 +28,7 @@ const (
 	Cancelio
 	Conjorius
 	AngeliDustio
-	Vitalio
+	Vitalius	
 	Dralio
 	Librarius
 	Aquarius
@@ -53,6 +55,7 @@ type Cdata struct {
 	Hp   int    `json:"hp"`
 	Atk0 Attack `json:"atk1"`
 	Atk1 Attack `json:"atk2"`
+	CName CardName
 }
 
 type cardType int
@@ -61,28 +64,35 @@ type Playable interface {
 	getType() cardType
 	getCost() int
 	getName() string
+	getCardName() CardName 
 }
 
 const (
 	Wizard cardType = iota
 	Permanent
 	InstantSpell
+	Deck
 )
 
 // Should be named Wizard
 type Card struct {
 	name string
+	cname CardName
 	hp   int
 	atk0 Attack
 	atk1 Attack
 
 	protected  bool
-	resistance bool
+	resistance bool 
 	attached   string
 }
 
 func (c Card) getType() cardType {
 	return Wizard 
+}
+
+func (c Card) getCardName() CardName {
+	return c.cname 
 }
 
 func (c Card) getCost() int {
@@ -95,13 +105,23 @@ func (c Card) getName() string {
 
 type Perm struct {
 	name string
+	cname CardName
 	cost int
 	card Card
 	activated bool
+	attachedTo target
+}
+
+func (p Perm) String() string {
+	return fmt.Sprintf("%v\nActivated: %v", p.name, p.activated)
 }
 
 func (p Perm) getType() cardType {
 	return Permanent 
+}
+
+func (c Perm) getCardName() CardName {
+	return c.cname 
 }
 
 func (p Perm) getCost() int {
@@ -115,10 +135,15 @@ func (p Perm) getName() string {
 type Instant struct {
 	name string
 	cost int
+	cname CardName
 }
 
 func (i Instant) getType() cardType {
 	return InstantSpell 
+}
+
+func (i Instant) getCardName() CardName {
+	return i.cname
 }
 
 func (i Instant) getCost() int {
@@ -138,7 +163,7 @@ type Player struct {
 	manaCap int
 
 	magicianHealth int
-	moreMana       bool
+	moreMana       int 
 	discountSpell  bool
 }
 
@@ -161,6 +186,7 @@ type Await struct {
 	atkr   target
 	spell bool
 	spellName string 
+	perm PermTarget 
 }
 
 type State struct {
@@ -169,13 +195,17 @@ type State struct {
 	currentPlayer playerID
 	discard       [MaxPlayers][]CardName
 	field         [MaxPlayers][]Card
-	perms         [MaxPlayers][]Perm
+	permanents    map[PermTarget]Perm 
+	dragons       [MaxPlayers][]Card
 	
 	Mana          int
 	manaMax       int
-	useMana bool
+	useMana bool 
+	testing bool
 
 	awaiting Await
+	logs     *bytes.Buffer 
+	output   *log.Logger
 }
 
 func initArea[T Playable](pType T, numPlayers int) [MaxPlayers][]T {
@@ -194,10 +224,19 @@ func initArea[T Playable](pType T, numPlayers int) [MaxPlayers][]T {
 	return area
 }
 
-func InitState(players int) (State, error) {
+func initDragons(players int) [MaxPlayers][]Card {
+	var d [MaxPlayers][]Card
+	for i := 0; i < MaxPlayers; i++ {
+		d[i] = make([]Card, MaxPermLen)
+	}
+	return d
+}
+
+func NewGame(players int) (State, error) {
 	if players < 2 || players > MaxPlayers {
 		return State{}, errors.New("Invalid number of players")
 	}
+	var buf bytes.Buffer
 
 	s := State{
 		players: [MaxPlayers]Player{
@@ -208,25 +247,29 @@ func InitState(players int) (State, error) {
 		currentPlayer: 0,
 		discard:       [MaxPlayers][]CardName{},
 		field:         initArea(Card{}, players),
-		perms:   initArea(Perm{}, players),
+		dragons:       initDragons(players), 
+		permanents: make(map[PermTarget]Perm),
 		manaMax: 6,
-		useMana: false,
+		logs: &buf,
 	}
+	s.output = log.New(&buf, "Game: ", log.Lmsgprefix)
+
 	return s.startTurn(), nil
 }
 
-func InitStateUsingMana(players int) (State, error) {
-	s, err := InitState(players)
+
+func NewTestGame(players int) (State, error) {
+	s, err := NewGame(players)
 	if err != nil {
 		return State{}, err
 	}
-	s.useMana = true
+	s.testing = true
 	return s, nil
 }
 
 func (s State) String() string {
 	return fmt.Sprintf(
-		"Await: %v\n"+
+			"Await: %v\n"+
 			"Current Player: %d\n"+
 			"mana: %d\n"+
 			"%v\n%v\n"+
@@ -239,4 +282,85 @@ func (s State) String() string {
 		s.field,
 		s.discard,
 	)
+}
+
+func lenPerm(p [MaxPermLen]Perm) (n int) {
+	empty := Perm{}
+	for _, perm := range p {
+		if perm != empty {
+			n++
+		}
+	}
+	return
+}
+
+func (s State) numOfPerms(name string) (n int) {
+	for _, p := range s.permanents {
+		if p.name == name {
+			n++
+		}
+	}
+	return
+}
+
+func (s State) lenPermsOf(p playerID) (n int) {
+	for i, _ := range s.permanents {
+		if i.pID == p {
+			n++
+		}
+	}
+	return
+}
+
+func (s State) numOfPermsOf(p playerID, name string) (n int) {
+	for i := 0; i < MaxPermLen; i++ { 
+		p, ok := s.permanents[PermTarget{pID: p, id: i}]
+		if ok && p.name == name {
+			n++
+		}
+	}
+	return
+}
+
+func (s State) numOfMyPerms(name string) (n int) {
+	return s.numOfPermsOf(s.currentPlayer, name)
+}
+
+var EmptyPerm = Perm{}
+
+type PermTarget struct {
+	pID playerID 
+	id int
+}
+func (s State) addPerm(id playerID, p Perm) (State, PermTarget, error) {
+	for i := 0; i < MaxPermLen; i++ { 
+		t := PermTarget{pID: id, id: i}	
+		_, ok := s.permanents[t] 
+		if !ok {
+			s.permanents[t] = p	
+			return s, t, nil
+		}
+	}
+	return s, PermTarget{}, errors.New("Max number of perms reached")
+}
+
+func (s State) removePerm(pt PermTarget) (State, error) {
+	p, ok := s.permanents[pt]
+	if !ok {
+		return s, errors.New("Couldnt find perm to remove")
+	}
+
+	delete(s.permanents, pt) 
+
+	c, err := s.cardFromTarget(p.attachedTo)
+	if err != nil {
+		return s, nil
+	}
+
+	c.attached = ""
+	if p.name == "Vitalius" {
+		s = s.doRawDmg(c, 2)
+	}
+
+	return s, nil
 }

@@ -7,22 +7,12 @@ import (
 	"strconv"
 )
 
-type argType int
-
-const (
-	Command argType = iota
-	Int
-	CardId
-	CurrFieldId
-	PlayerId
-	FieldId
-	AtkId
-)
-
 func convertArgs(n int, args ...string) ([]int, error) {
 	lenArgs := len(args)
 	if lenArgs < n {
-		return []int{}, errors.New(fmt.Sprintf("expected %d args, got %d", n, lenArgs))
+		return []int{}, 
+		       InputErr{fmt.Sprintf("Expected %d args, got %d",
+			   						n, lenArgs)}
 	}
 
 	result := make([]int, len(args))
@@ -36,48 +26,43 @@ func convertArgs(n int, args ...string) ([]int, error) {
 	return result, nil
 }
 
-func (g State) Execute(cards []Cdata, args ...string) (State, []string, error) {
-	out := make([]string, 0)
-	sayOut := func(l string) {
-		out = append(out, l)
-	}
-
+func (g State) Execute(cards []Cdata, args ...string) (State, error) {
 	switch args[0] {
 	case "target":
 		nums, err := convertArgs(2, args[1:]...)
 		if err != nil {
-			return g, out, err
+			return g, err
 		}
 
 		g, err = g.target(target{pID: playerID(nums[0]), id: nums[1]})
 		if err != nil {
-			return g, out, err
+			return g, err
 		}
 
-		return g, out, nil
+		return g, nil
 	case "create":
 		nums, err := convertArgs(1, args[1:]...)
 		if err != nil {
-			return g, out, err
+			return g, err
 		}
 
 		game, err := g.play(g.currentPlayer, CardFromName(cards, CardName(nums[0])))
 		if err != nil {
-			return g, out, err
+			return g, err
 		}
 
-		return game, out, nil
+		return game, nil
 	case "setmana":
 		nums, err := convertArgs(1, args[1:]...)
 		if err != nil {
-			return g, out, err
+			return g, err
 		}
 
-		return g.setMana(nums[0]), out, nil
+		return g.setMana(nums[0]), nil
 	case "attack":
 		nums, err := convertArgs(5, args[1:]...)
 		if err != nil {
-			return g, out, err
+			return g, err
 		}
 
 		newG, err := g.attack(
@@ -92,62 +77,56 @@ func (g State) Execute(cards []Cdata, args ...string) (State, []string, error) {
 			})
 
 		if err != nil {
-			return g, out, err
+			return g, err
 		}
 
-		return newG, out, nil
+		return newG, nil
 	case "play":
-		h := g.players[g.currentPlayer].hand
-
-		if len(args) < 2 {
-			sayOut("Not enough args, expected 2")
-			return g, out, errors.New("temp")
-		}
-
-		idx, err := strconv.Atoi(args[1])
+		nums, err := convertArgs(1, args[1:]...)
+		idx := nums[0]
 		if err != nil {
-			return g, out, err
+			return g, err
 		}
+
+		h := g.players[g.currentPlayer].hand
 		if idx < 0 || idx > len(h)-1 {
-			return g, out, err
+			return g, err
 		}
 
 		card := CardFromName(cards, h[idx])
 		game, err := g.play(g.currentPlayer, card)
 		if err != nil {
-			return g, out, err
+			return g, err
 		}
 
 		game, err = game.removeFromHand(game.currentPlayer, idx)
 		if err != nil {
-			return g, out, err
+			return g, err
 		}
 
-		return game, out, nil
+		return game, nil
 	case "draw":
 		g, err := g.drawCard(g.currentPlayer)
 		if err != nil {
-			return g, out, err
+			return g, err
 		}
-		sayOut("Drew 1 card")
-		return g, out, nil
+		return g, nil
 	case "end":
 		g, err := g.endTurn()
 		if err != nil {
-			return g, out, err
+			return g, err
 		}
-		return g, out, nil
+		return g, nil
 	default:
-		return g, out, errors.New("Invalid")
+		return g, errors.New("Invalid Command")
 	}
 }
 
 func GetCardData(data []byte) []Cdata {
-	//var rawCards map[string]json.RawMessage
 	var rawCards []json.RawMessage
 	err := json.Unmarshal(data, &rawCards)
 	if err != nil {
-		// return err
+		panic("Couldn't parse card data")
 	}
 
 	cards := make([]Cdata, 30)
@@ -155,10 +134,12 @@ func GetCardData(data []byte) []Cdata {
 		var c Cdata
 		err := json.Unmarshal(v, &c)
 		if err != nil {
-			// return err
+			panic("Couldn't parse card data")
 		}
 
+		c.CName = CardName(i)
 		cards[i] = c
 	}
+
 	return cards
 }

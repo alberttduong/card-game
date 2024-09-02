@@ -17,7 +17,7 @@ var atkSideEffects = map[string]func (State, target, target) State {
 }
 
 func moreMana(s State, atkr, defr target) State {
-	s.players[atkr.pID].moreMana = true
+	s.players[atkr.pID].moreMana++ 
 	return s
 }
 

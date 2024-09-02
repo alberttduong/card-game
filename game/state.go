@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"math/rand"
 )
 
 const (
@@ -14,6 +15,10 @@ const (
 	PyrusBalioDmg = 1
 	EnhanciusBuff = 2
 	DragoniusDmg = 3
+	AngeliDustioHeal = 2
+	VitaliusBuff = 2
+	MeteorusDmg = 1
+	DracusPyrioDmg = 7
 )
 
 func test() {
@@ -30,20 +35,28 @@ func (s State) startTurn() State {
 	p := &s.players[s.currentPlayer]
 
 	mana := p.manaCap
-	if mana < s.manaMax {
+	manaMax := s.manaMax + s.numOfPerms("Aquarius")	
+
+	if mana < manaMax {
 		p.manaCap++
 	}
 
-	if p.moreMana {
-		mana++
-		p.moreMana = false
-	}
+	mana += p.moreMana
+	p.moreMana = 0
 
 	s.Mana = mana
 
 	field := &s.field[s.currentPlayer]
 	for i := 0; i < len(*field); i++ {
 		(*field)[i].protected = false
+	}
+	
+	if !s.testing {
+		s, _ = s.drawCard(p.id)
+	}
+	numLibrarius := s.numOfPerms("Librarius")
+	for i := 0; i < numLibrarius; i++ {
+		s, _ = s.drawCard(p.id)
 	}
 
 	return s
@@ -56,6 +69,7 @@ func CardFromName(cards []Cdata, n CardName) Playable {
 		return Perm{
 			name: c.Name,
 			cost: c.Hp,
+			cname: c.CName,
 		}
 	}
 
@@ -63,6 +77,7 @@ func CardFromName(cards []Cdata, n CardName) Playable {
 		return Instant{
 			name: c.Name,
 			cost: c.Hp, // should be c.Cost 
+			cname: c.CName,
 		}
 	}
 
@@ -71,15 +86,21 @@ func CardFromName(cards []Cdata, n CardName) Playable {
 		hp:   c.Hp,
 		atk0: c.Atk0,
 		atk1: c.Atk1,
+		cname: c.CName,
 	}
 }
 
 func (s State) playPerm(player playerID, p Perm) (State, error) {
+	s, pTarget, err := s.addPerm(player, p)
+	if err != nil {
+		return s, err
+	}
+
 	switch p.name {
-	case "Mortius", "Enhancius":
-		s = s.awaitSpell(p)
+	case "Mortius", "Enhancius", "Vitalius", "Bubublius", "Armorius": // Attachments
+		s = s.awaitPerm(pTarget)
 	case "Dragonius":
-		p.card = Card{	
+		c := Card{	
 			name: "Dragonius",
 			hp: 3,
 			atk0: Attack{
@@ -87,11 +108,11 @@ func (s State) playPerm(player playerID, p Perm) (State, error) {
 				Dmg: 3,
 			},
 		}
-	case "Aquarius":
+		s.dragons[player][s.lenPermsOf(player) - 1] = c 
+	case "Aquarius", "Conjorius", "Librarius", "Meteorus":
 	default:
 		return s, errors.New("unexpected perm")
 	}
-	s.perms[player] = append(s.perms[player], p) 
 	return s, nil
 }
 
@@ -106,7 +127,7 @@ func (s State) play(p playerID, c Playable) (State, error) {
 		return s, nil
 	}
 
-	if s.useMana == true {
+	if s.testing == false {
 		cost := c.getCost()
 		if s.players[p].discountSpell {
 			cost--
@@ -128,7 +149,12 @@ func (s State) play(p playerID, c Playable) (State, error) {
 }
 
 func (s State) playInstant(spell Instant) (State, error) {
-	spellsThatAwait := []string{"Pyrus Balio", "Protectio", "Cancelio"}   
+	spellsThatAwait := []string{"Pyrus Balio", "Protectio", "Cancelio", "Angeli Dustio", "Dracus Pyrio", "Retrievio", "Extractio"}
+
+	if spell.name == "Dracus Pyrio" &&
+	   len(s.players[s.currentPlayer].hand) == 0 {
+		return s, GameErr{"Can't play Dracus Pyrio with an empty hand"}
+	}
 
 	if slices.Contains(spellsThatAwait, spell.name) {
 		return s.awaitSpell(spell), nil
@@ -149,8 +175,8 @@ func (s State) drawCard(p playerID) (State, error) {
 	if len(d) == 0 {
 		return s, errors.New("Deck empty")
 	}
-
-	s.players[p].hand = append(s.players[p].hand, d[len(d)-1])
+	s.output.Println("Hello")
+	player.hand = append(player.hand, d[len(d)-1])
 	d = d[:len(d)]
 	return s, nil
 }
@@ -180,10 +206,9 @@ type target struct {
 
 func (s State) endTurn() (State, error) {
 	s.currentPlayer = playerID(int(s.currentPlayer+1) % s.numPlayers)
-	for _, permField := range s.perms {
-		for i, _ := range permField {
-			permField[i].activated = false	
-		}
+	for k, v := range s.permanents {
+		v.activated = false
+		s.permanents[k] = v
 	}
 	return s.startTurn(), nil
 }
@@ -191,6 +216,29 @@ func (s State) endTurn() (State, error) {
 func (s State) setMana(n int) State {
 	s.Mana = n
 	return s
+}
+
+func (s State) activatePerm(pt PermTarget) (State, error) {
+	p, ok := s.permanents[pt]
+	if !ok {
+		return s, errors.New("couldnt find perm")
+	}
+
+	if p.activated {
+		return s, errors.New("Perm alr activated")
+	}
+	p.activated = true
+	s.permanents[pt] = p
+	
+	if p.name == "Meteorus" {
+		t, err := s.randomTarget()
+		if err != nil {
+			return s, err
+		}
+
+		return s.DoDmg(int(t.pID), t.id, MeteorusDmg), nil 
+	}
+	return s, errors.New("not a valid perm name")
 }
 
 func (s State) attack(atkr, defr target) (State, error) {
@@ -206,17 +254,21 @@ func (s State) attack(atkr, defr target) (State, error) {
 
 	atk, err := atkrCard.atk(atkr.atkNum)
 	if errors.Is(err, DragoniusAtkErr{}) {
-		dragon, _ := s.permFromTarget(atkr)
-		if dragon.activated == true {
+		d := PermTarget{pID: atkr.pID, id: atkr.id}
+		dragon, ok := s.permanents[d]
+		if !ok {
+			return s, errors.New("couldnt find dragon")
+		}
+		if dragon.activated {
 			return s, errors.New("attack with dragon only once per turn")
 		}
 		dragon.activated = true
+		s.permanents[d] = dragon
 		return s.setAwait(atkr), nil 
 	}
 	if err != nil {
 		return s, err
 	}
-
 
 	sideEffect, ok := atkSideEffects[atk.Name]	
 	if ok {
@@ -276,25 +328,43 @@ func (g State) DoDmg(p, id, dmg int) State {
 }
 
 func (g State) DoDmgToCard(c *Card, dmg int) State {
-	if c.protected {
-		dmg = 0
-	}
-
-	if dmg > 0 && c.resistance == true {
-		dmg--
+	if dmg > 0 {
+		if c.protected {
+			dmg = 0
+		} else {
+			if c.resistance {
+				// constants
+				dmg--
+			}
+			if c.attached == "Armorius" {
+				dmg--
+			}
+		}
 	}
 
 	return g.doRawDmg(c, dmg)
 }
 
 func (g State) doRawDmg(c *Card, dmg int) State {
+	maxH := MaxHp
+	if c.attached == "Vitalius" {
+		maxH += VitaliusBuff	
+	}
+
 	newHp := c.hp - dmg
 	if newHp < 0 {
 		newHp = 0
-	} else if newHp > MaxHp {
-		newHp = MaxHp 
+	} else if newHp > maxH {
+		newHp = maxH 
+	}
+	
+	if c.hp > 0 && newHp == 0 {
+		for i, _ := range g.players {
+			g.players[i].moreMana += g.numOfPermsOf(playerID(i), "Conjorius")	
+		}
 	}
 	c.hp = newHp
+
 	return g
 }
 
@@ -323,9 +393,9 @@ func (s State) cardFromTarget(t target) (*Card, error) {
 		return nil, err
 	}
 	if t.area == Permanent {
-		p := &s.perms[t.pID][t.id]
+		p := s.permanents[PermTarget{t.pID, t.id}]
 		if p.name == "Dragonius" {
-			return &p.card, nil
+			return &s.dragons[t.pID][t.id], nil
 		}
 		return nil, errors.New("perm is not a valid target")
 	}
@@ -336,44 +406,13 @@ func (s State) cardFromTarget(t target) (*Card, error) {
 	return &s.field[t.pID][t.id], nil
 }
 
-func (s State) permFromTarget(t target) (*Perm, error) {
-	if err := s.checkTarget(t); err != nil {
-		return nil, err
-	}
-	if t.area != Permanent {
-		return nil, errors.New("Target not a valid perm")
-	}
-	return &s.perms[t.pID][t.id], nil
-}
-
 func (s State) spellTarget(defr target) (State, error) {
-	switch s.awaiting.spellName {
-	case "Pyrus Balio":
-		return s.DoDmg(int(defr.pID), defr.id, PyrusBalioDmg), nil
-	case "Protectio":
-		c, err := s.cardFromTarget(defr)	
-		if err != nil {
-			return s, err
-		}
-		c.protected = true 
-		return s, nil 
-	// Attach
-	case "Mortius", "Enhancius":
-		c, err := s.cardFromTarget(defr)	
-		if err != nil {
-			return s, err
-		}
-		c.attached = s.awaiting.spellName 
-		return s, nil
-	case "Cancelio":
-		p, err := s.permFromTarget(defr)
-		if err != nil {
-			return s, err
-		}
-		*p = Perm{} 
-		return s, nil
+	spell, ok := castSpellOnTarget[s.awaiting.spellName]
+	if !ok {
+		return s, errors.New("Invalid spell name")
 	}
-	return s, errors.New("awaiting invalid spell name")
+
+	return spell(s, defr)
 }
 
 func (s State) target(defr target) (State, error) {
@@ -417,11 +456,11 @@ func (s State) target(defr target) (State, error) {
 	if targetType == Permanent {
 		switch atk.Name {
 		case "removePerm":
-			s.perms[defr.pID][defr.id] = Perm{} 
+			return s.removePerm(PermTarget{
+					pID: defr.pID, id: defr.id})
 		}
 		return s, errors.New("Unexpected attack")
 	}
-
 
 	switch atk.Name {
 	case "revive":
@@ -465,9 +504,44 @@ func (s State) awaitSpell(spell Playable) State {
 	return s
 }
 
+func (s State) awaitPerm(pt PermTarget) State {
+	p, ok := s.permanents[pt]
+	if !ok {
+		panic("COuldnt find perm to await")
+	}
+	s.awaiting = Await{
+		isTrue: true,
+		spell: true,
+		spellName: p.getName(), 
+		perm: pt,
+	}
+	return s
+}
+
 func (s State) cancelAwait() State {
 	s.awaiting = Await{}
 	return s
+}
+
+func (s State) randomTarget() (target, error) {
+	targets := []target{}	
+	for p := range s.players {
+		for i := range MaxFieldLen {
+			t := target{pID: playerID(p), id: i}  
+			c, err := s.cardFromTarget(t)
+			if err != nil {
+				continue
+			}
+
+			if c.hp != 0 {
+				targets = append(targets, t)
+			}
+		}	
+	}
+	if len(targets) == 0 {
+		return target{}, errors.New("No targets to damage")
+	}
+	return targets[rand.Intn(len(targets))], nil 
 }
 
 func (c Card) atk(n int) (Attack, error) {
