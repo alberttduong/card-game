@@ -1,93 +1,95 @@
 package game
 
-var castSpellOnTarget = map[string]func (State, target) (State, error) {
-	"Pyrus Balio": castDamage(PyrusBalioDmg),
-	"Dracus Pyrio": castDamage(DracusPyrioDmg),
-	"Protectio": castProtectio,
-	"Cancelio": castCancelio, 
-	"Angeli Dustio": castAngeliDustio,
-	"Vitalius": castVitalius,
-	"Retrievio": castRetrievio,
-	"Extractio": castExtractio,
+import "slices"
+
+var castSpellOnTarget = map[CardName]func(State, target) (State, error){
+	PyrusBalio:   castDamage(PyrusBalioDmg),
+	DracusPyrio:  castDamage(DracusPyrioDmg),
+	Protectio:    castProtectio,
+	Cancelio:     castCancelio,
+	AngeliDustio: castAngeliDustio,
+	Vitalius:     castVitalius,
+	Retrievio:    castRetrievio,
+	Extractio:    castExtractio,
 	// Attachments
-	"Enhancius": castAttach, 
-	"Mortius": castAttach,
-	"Armorius": castAttach,
-	"Bubublius": castAttach,
+	Enhancius: castAttach,
+	Mortius:   castAttach,
+	Armorius:  castAttach,
+	Bubublius: castAttach,
 }
 
 func (s State) cardToCast(defr target) (*Card, error) {
-	c, err := s.cardFromTarget(defr)		
+	c, err := s.cardFromTarget(defr)
 	if err != nil {
 		return c, err
 	}
-	if c.attached == "Bubublius" {
-		return c, TargetBububliusErr 
+	if c.attached == Bubublius {
+		return c, TargetBububliusErr
 	}
-	return c, nil 
+	return c, nil
 }
 
-func castDamage(dmg int) func (State, target) (State, error) { 
-	return func (s State, defr target) (State, error) {
-		c, err := s.cardToCast(defr)	
+func castDamage(dmg int) func(State, target) (State, error) {
+	return func(s State, defr target) (State, error) {
+		c, err := s.cardToCast(defr)
 		if err != nil {
 			return s, err
 		}
-		
+
 		return s.DoDmgToCard(c, dmg), nil
 	}
 }
 
 func castProtectio(s State, defr target) (State, error) {
-	c, err := s.cardToCast(defr)	
+	c, err := s.cardToCast(defr)
 	if err != nil {
 		return s, err
 	}
-	c.protected = true 
-	return s, nil 
+	c.protected = true
+	return s, nil
 }
 
 func castRetrievio(s State, defr target) (State, error) {
 	if err := s.checkTarget(defr); err != nil {
 		return s, err
 	}
-	pt := PermTarget{pID: defr.pID, id: defr.id}	
+	pt := PermTarget{pID: defr.pID, id: defr.id}
 
-	p, ok := s.permanents[pt]
+	p, ok := s.Permanents[pt]
 	if !ok {
-		return s, TargetPermErr 
+		return s, TargetPermErr
 	}
 
-	s.players[s.currentPlayer].hand = append(s.players[s.currentPlayer].hand, p.cname)
+	s.Players[s.CurrentPlayer].Hand = append(s.Players[s.CurrentPlayer].Hand, p.CName)
 	return s.removePerm(pt)
 }
 
 func castExtractio(s State, defr target) (State, error) {
 	id, ok := s.inDeck(CardName(defr.id))
 	if !ok {
-		return s, TargetDeckErr 
+		return s, TargetDeckErr
 	}
-	p := &s.players[s.currentPlayer]
+	p := &s.Players[s.CurrentPlayer]
 	lastId := len(p.deck) - 1
 	p.deck[lastId], p.deck[id] = p.deck[id], p.deck[lastId]
-	return s.drawCard(s.currentPlayer) 
+	return s.drawCard(s.CurrentPlayer)
 }
 
 func castAttach(s State, defr target) (State, error) {
-	c, err := s.cardToCast(defr)	
+	c, err := s.cardToCast(defr)
 	if err != nil {
 		return s, err
 	}
 	c.attached = s.awaiting.spellName
 
-	p, ok := s.permanents[s.awaiting.perm]
+	p, ok := s.Permanents[s.awaiting.perm]
 	if !ok {
-		return s, TargetPermErr 
+		return s, TargetPermErr
 	}
-	p.attachedTo = defr
-	s.permanents[s.awaiting.perm] = p
+	p.AttachedTo = defr
+	s.Permanents[s.awaiting.perm] = p
 
-	return s, nil 
+	return s, nil
 }
 
 func castVitalius(s State, defr target) (State, error) {
@@ -96,7 +98,7 @@ func castVitalius(s State, defr target) (State, error) {
 		return s, err
 	}
 
-	c, _ := s.cardToCast(defr)	
+	c, _ := s.cardToCast(defr)
 	return s.doRawDmg(c, -2), nil
 }
 
@@ -105,9 +107,38 @@ func castCancelio(s State, defr target) (State, error) {
 }
 
 func castAngeliDustio(s State, defr target) (State, error) {
-	c, err := s.cardToCast(defr)	
+	c, err := s.cardToCast(defr)
 	if err != nil {
 		return s, err
 	}
-	return s.DoDmgToCard(c, -AngeliDustioHeal), nil	
+	return s.DoDmgToCard(c, -AngeliDustioHeal), nil
+}
+
+var SpellsThatAwait = []CardName{
+	PyrusBalio,
+	Protectio,
+	Cancelio,
+	AngeliDustio,
+	DracusPyrio,
+	Retrievio,
+	Extractio,
+}
+
+func (s State) playInstant(spell Instant) (State, error) {
+	if spell.CName == DracusPyrio &&
+		len(s.Players[s.CurrentPlayer].Hand) == 0 {
+		return s, GameErr{"Can't play Dracus Pyrio with an empty Hand"}
+	}
+
+	if slices.Contains(SpellsThatAwait, spell.CName) {
+		return s.awaitSpell(spell), nil
+	}
+
+	if spell.CName == Dralio {
+		s, _ = s.drawCard(s.CurrentPlayer)
+		s, err := s.drawCard(s.CurrentPlayer)
+		return s, err
+	}
+
+	return s, ImplmtErr{"Invalid instant"}
 }

@@ -7,12 +7,19 @@ import (
 	"strconv"
 )
 
+func isValidCardNumber(n int) error {
+	if n < 1 || n > 30 {
+		return errors.New("Invalid card number")
+	}
+	return nil
+}
+
 func convertArgs(n int, args ...string) ([]int, error) {
 	lenArgs := len(args)
 	if lenArgs < n {
-		return []int{}, 
-		       InputErr{fmt.Sprintf("Expected %d args, got %d",
-			   						n, lenArgs)}
+		return []int{},
+			InputErr{fmt.Sprintf("Expected %d args, got %d",
+				n, lenArgs)}
 	}
 
 	result := make([]int, len(args))
@@ -46,7 +53,11 @@ func (g State) Execute(cards []Cdata, args ...string) (State, error) {
 			return g, err
 		}
 
-		game, err := g.play(g.currentPlayer, CardFromName(cards, CardName(nums[0])))
+		if err := isValidCardNumber(nums[0]); err != nil {
+			return g, err
+		}
+
+		game, err := g.play(g.CurrentPlayer, CardFromName(cards, CardName(nums[0])))
 		if err != nil {
 			return g, err
 		}
@@ -83,30 +94,30 @@ func (g State) Execute(cards []Cdata, args ...string) (State, error) {
 		return newG, nil
 	case "play":
 		nums, err := convertArgs(1, args[1:]...)
-		idx := nums[0]
 		if err != nil {
 			return g, err
 		}
 
-		h := g.players[g.currentPlayer].hand
+		idx := nums[0]
+		h := g.Players[g.CurrentPlayer].Hand
 		if idx < 0 || idx > len(h)-1 {
 			return g, err
 		}
 
 		card := CardFromName(cards, h[idx])
-		game, err := g.play(g.currentPlayer, card)
+		game, err := g.play(g.CurrentPlayer, card)
 		if err != nil {
 			return g, err
 		}
 
-		game, err = game.removeFromHand(game.currentPlayer, idx)
+		game, err = game.removeFromHand(game.CurrentPlayer, idx)
 		if err != nil {
 			return g, err
 		}
 
 		return game, nil
 	case "draw":
-		g, err := g.drawCard(g.currentPlayer)
+		g, err := g.drawCard(g.CurrentPlayer)
 		if err != nil {
 			return g, err
 		}
@@ -137,7 +148,7 @@ func GetCardData(data []byte) []Cdata {
 			panic("Couldn't parse card data")
 		}
 
-		c.CName = CardName(i)
+		c.CName = CardName(i + 1)
 		cards[i] = c
 	}
 

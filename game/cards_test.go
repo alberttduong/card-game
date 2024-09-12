@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"fmt"
 	"testing"
+	"math/rand"
 )
 
 //go:embed cards.json
@@ -32,19 +33,19 @@ func (g State) playCards(p int, names ...CardName) State {
 		if err != nil {
 			panic(err)
 		}
-	}	
+	}
 	return g
 }
 
 func (g State) CardHp(p int, id int) int {
-	return g.field[p][id].hp
+	return g.Field[p][id].HP
 }
 
 func (g State) InitFullDeck() State {
-	for p := 0; p < g.numPlayers; p++ {
-		g.players[p].deck = []CardName{}
+	for p := 0; p < g.NumPlayers; p++ {
+		g.Players[p].deck = []CardName{}
 		for i := 0; i < 30; i++ {
-			g.players[p].deck = append(g.players[p].deck, Librarian)
+			g.Players[p].deck = append(g.Players[p].deck, Librarian)
 		}
 	}
 
@@ -66,24 +67,23 @@ func (g State) checkAllyHpIs(t *testing.T, expected int) {
 }
 
 func (g State) handSize() int {
-	return len(g.players[g.currentPlayer].hand)
+	return len(g.Players[g.CurrentPlayer].Hand)
 }
 
 func (g State) checkHandSize(t *testing.T, expected int) {
 	if size := g.handSize(); size != expected {
-		t.Errorf("Expected hand size of %d, Got %d", expected, size)
+		t.Errorf("Expected Hand size of %d, Got %d", expected, size)
 		fmt.Println(g)
 	}
 }
 
-
 func Test_LenPerm(t *testing.T) {
-	cases := map[[MaxPermLen]Perm]int {
-		[MaxPermLen]Perm{}: 0,
-		[MaxPermLen]Perm{ Perm{} }: 0,
-		[MaxPermLen]Perm{ Perm{name: "Perm"} }: 1,
-		[MaxPermLen]Perm{ Perm{}, Perm{name: "Perm"} }: 1,
-		[MaxPermLen]Perm{ Perm{name: "Perm"}, Perm{}, Perm{name: "Perm"} }: 2,
+	cases := map[[MaxPermLen]Perm]int{
+		[MaxPermLen]Perm{}:                                                     0,
+		[MaxPermLen]Perm{Perm{}}:                                               0,
+		[MaxPermLen]Perm{Perm{CName: None}}:                                    0,
+		[MaxPermLen]Perm{Perm{}, Perm{CName: Aquarius}}:                        1,
+		[MaxPermLen]Perm{Perm{CName: Aquarius}, Perm{}, Perm{CName: Aquarius}}: 2,
 	}
 
 	for c, e := range cases {
@@ -93,31 +93,39 @@ func Test_LenPerm(t *testing.T) {
 	}
 }
 
+func Test_Poo(t *testing.T) {
+	g, _ := NewTestGame(2)
+	g, err := g.play(playerID(0), CardFromName(cards, Dragonius))
+	if err != nil {
+		t.Error(err)
+	}
+}
+
 func Test_NumPerms(t *testing.T) {
 	g, _ := NewTestGame(2)
 	g = g.playCards(0, Dragonius, Dragonius, Librarian, Aquarius)
-	g = g.playCards(1, Dragonius, Librarian) 
+	g = g.playCards(1, Dragonius, Librarian)
 
 	type input struct {
 		mineOnly bool
-		name string
+		name     CardName
 	}
 
-	cases := map[input]int {
-		input{false, "Dragonius"}: 3,
-		input{false, "Aquarius"}: 1,
-		input{false, "Librarian"}: 0,
-		input{true, "Dragonius"}: 2,
-		input{true, "Aquarius"}: 1,
-		input{true, "Librarian"}: 0,
+	cases := map[input]int{
+		input{false, Dragonius}: 3,
+		input{false, Aquarius}:  1,
+		input{false, Librarian}: 0,
+		input{true, Dragonius}:  2,
+		input{true, Aquarius}:   1,
+		input{true, Librarian}:  0,
 	}
 
-	for n, e := range cases {	
-		num := g.numOfPerms(n.name)		
+	for n, e := range cases {
+		num := g.numOfPerms(n.name)
 		if n.mineOnly {
-			num = g.numOfMyPerms(n.name)		
+			num = g.numOfMyPerms(n.name)
 		}
-		if num != e { 
+		if num != e {
 			t.Errorf("Expected num perms %d, Got %d", e, num)
 		}
 	}
@@ -129,7 +137,7 @@ func Test_RemovePerm(t *testing.T) {
 
 func Test_Mana(t *testing.T) {
 	g, _ := NewTestGame(2)
-	expect := func (expected int) {
+	expect := func(expected int) {
 		if g.Mana != expected {
 			t.Errorf("Expected mana %d got %d", expected, g.Mana)
 		}
@@ -149,18 +157,18 @@ func Test_Librarian(t *testing.T) {
 	g = g.playCards(0, Librarian, Librarian)
 
 	g = g.InitFullDeck()
-	
-	hand := g.handSize()
+
+	Hand := g.handSize()
 	g = g.doAtk(0)
-	g.checkHandSize(t, hand + 1)
+	g.checkHandSize(t, Hand+1)
 
 	for i := 0; i < 6; i++ {
-		g, _ = g.drawCard(g.currentPlayer)
+		g, _ = g.drawCard(g.CurrentPlayer)
 	}
 
 	hp := g.CardHp(0, 1)
 	g = g.doAtk(1)
-	g.checkAllyHpIs(t, hp - 3)
+	g.checkAllyHpIs(t, hp-3)
 }
 
 func Test_Angel(t *testing.T) {
@@ -192,18 +200,18 @@ func Test_Magician(t *testing.T) {
 
 	g = g.DoDmg(0, 0, 1)
 	g = g.doAtk(0)
-	if h := g.players[0].magicianHealth; h != 7 {
-		t.Errorf("expected hp 7 got %d", h)
+	if h := g.Players[0].magicianHealth; h != 7 {
+		t.Errorf("expected.HP 7 got %d", h)
 	}
 
-	g, err := g.play(0, CardFromName(cards, g.players[0].hand[0]))
+	g, err := g.play(0, CardFromName(cards, g.Players[0].Hand[0]))
 	if err != nil {
 		t.Error(err)
 	}
 
 	g = g.doAtk(1)
-	if h := g.players[0].magicianHealth; h != 5 {
-		t.Errorf("expected hp 5 got %d", h)
+	if h := g.Players[0].magicianHealth; h != 5 {
+		t.Errorf("expected.HP 5 got %d", h)
 	}
 }
 
@@ -218,7 +226,7 @@ func Test_Pyromancer(t *testing.T) {
 	}
 
 	g = g.doAtk(1)
-	for p := 0; p < g.numPlayers; p++ {
+	for p := 0; p < g.NumPlayers; p++ {
 		for i := 0; i < 2; i++ {
 			if hp := g.CardHp(p, i); hp != 7 {
 				t.Errorf("Expected Hp 7, Got %d", hp)
@@ -242,12 +250,12 @@ func Test_Shieldmancer(t *testing.T) {
 	// protect only lasts 1 turn
 	hp = g.CardHp(0, 1)
 	g = g.DoDmg(0, 1, 3)
-	g.checkAllyHpIs(t, hp - 3)
+	g.checkAllyHpIs(t, hp-3)
 
 	g = g.doAtk(1)
 	hp = g.CardHp(0, 1)
 	g = g.DoDmg(0, 1, 2)
-	g.checkAllyHpIs(t, hp - 1)
+	g.checkAllyHpIs(t, hp-1)
 }
 
 func Test_Conjurer(t *testing.T) {
@@ -266,14 +274,14 @@ func Test_Conjurer(t *testing.T) {
 	g1, _ := NewGame(2)
 	g1, _ = g1.play(playerID(0), CardFromName(cards, Conjurer))
 	g1, _ = g1.play(playerID(0), CardFromName(cards, Librarian))
-		
+
 	//refactor when attacks cost mana
 	g1 = g1.doAtk(1)
 	g1 = g1.setMana(0)
 	if g1.Mana != 0 {
 		t.Errorf("expected 0 mana got %d", g1.Mana)
 	}
-	if g1.players[0].discountSpell == false {
+	if g1.Players[0].discountSpell == false {
 		t.Errorf("discountspell shoudl be true")
 	}
 	g1, err := g1.play(playerID(0), CardFromName(cards, PyrusBalio))
@@ -302,20 +310,20 @@ func Test_Mortician(t *testing.T) {
 	hp := g.CardHp(0, 0)
 	g, _ = g.attack(target{pID: 0, id: 0, atkNum: 1},
 		target{pID: 0, id: 0})
-	g.checkHpIs(t, hp - 6)
+	g.checkHpIs(t, hp-6)
 }
 
 func Test_MindMage(t *testing.T) {
 	g, _ := NewTestGame(2)
 	g = g.playCards(0, MindMage, Shieldmancer)
 	g, _ = g.attack(target{pID: 0, id: 1, atkNum: 0},
-		target{pID: 0, id: 1})	
+		target{pID: 0, id: 1})
 
 	hp := g.CardHp(0, 0) - 2
 
 	g, _ = g.attack(target{pID: 0, id: 0, atkNum: 0},
-		target{pID: 0, id: 0})		
-	
+		target{pID: 0, id: 0})
+
 	g.checkHpIs(t, hp)
 
 	g, _ = g.play(playerID(0), CardFromName(cards, Aquarius))
@@ -323,9 +331,8 @@ func Test_MindMage(t *testing.T) {
 
 	g, _ = g.target(target{pID: 0, id: 0, area: Permanent})
 
-	if _, ok := g.permanents[PermTarget{0, 0}];
-		  ok == true {
-		t.Error("didnt remove perm")	
+	if _, ok := g.Permanents[PermTarget{0, 0}]; ok == true {
+		t.Error("didnt remove perm")
 	}
 }
 
@@ -338,15 +345,15 @@ func Test_Bloodeater(t *testing.T) {
 
 	g, _ = g.target(target{pID: 0, id: 1})
 	g.checkAllyHpIs(t, 6)
-	
+
 	g = g.playCards(0, Librarian)
 	g = g.doAtk(1)
-	g, err := g.target(target{pID: 0, id:2})
+	g, err := g.target(target{pID: 0, id: 2})
 	if err == nil {
 		t.Errorf("expected an error but got none")
 	}
 	g = g.doAtk(1)
-	g, err = g.target(target{pID: 0, id:2})
+	g, err = g.target(target{pID: 0, id: 2})
 	if err != nil {
 		t.Error(err)
 	}
@@ -385,9 +392,9 @@ func Test_Protectio(t *testing.T) {
 	g, err := g.target(target{pID: 0, id: 0})
 	if err != nil {
 		t.Error(err)
-	}	
+	}
 
-	if g.field[0][0].protected == false {
+	if g.Field[0][0].protected == false {
 		t.Error("expected wizard to be protected")
 	}
 }
@@ -397,7 +404,7 @@ func Test_Mortius(t *testing.T) {
 	g = g.playCards(0, Magician, Librarian, Mortius)
 	g, _ = g.target(target{pID: 0, id: 1})
 	g = g.doAtk(1).doAtk(1)
-	if g.field[0][1].attached != "Mortius" {
+	if g.Field[0][1].attached != Mortius {
 		t.Error("not attached")
 	}
 	g.checkHpIs(t, 6)
@@ -413,19 +420,19 @@ func Test_Enhancius(t *testing.T) {
 
 func Test_Dragonius(t *testing.T) {
 	g, _ := NewTestGame(2)
-	g = g.playCards(0, Librarian, Dragonius) 
-	
+	g = g.playCards(0, Librarian, Dragonius)
+
 	d, err := g.cardFromTarget(target{pID: 0, id: 0, area: Permanent})
 	if err != nil {
 		t.Error(err)
 	}
-	if d.name != "Dragonius" {
-		fmt.Println(g.dragons)
-		t.Errorf("Dragon card from target gives %v", d.name)
+	if d.CName != Dragonius {
+		fmt.Println(g.Dragons)
+		t.Errorf("Dragon card from target gives %v", d.CName)
 	}
 
 	g, err = g.attack(target{pID: 0, id: 0, area: Permanent},
-					target{pID: 0, id: 0})
+		target{pID: 0, id: 0})
 	if err != nil {
 		t.Error(err)
 	}
@@ -434,34 +441,33 @@ func Test_Dragonius(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if hp := g.field[0][0].hp; hp != 5 {
-		t.Errorf("expected hp 5 got %d", hp)
+	if hp := g.Field[0][0].HP; hp != 5 {
+		t.Errorf("expected.HP 5 got %d", hp)
 	}
-	
-	if !g.permanents[PermTarget{0, 0}].activated {
+
+	if !g.Permanents[PermTarget{0, 0}].Activated {
 		t.Error("expected activation of perm")
 	}
 
 	g, err = g.attack(target{pID: 0, id: 0},
-			target{pID: 0, id: 0, area: Permanent})
-	
+		target{pID: 0, id: 0, area: Permanent})
+
 	if err != nil {
 		t.Error(err)
 	}
 
-	if d.hp != 2 {
-		t.Errorf("Expected HP 2 Got %d", d.hp)
+	if d.HP != 2 {
+		t.Errorf("Expected HP 2 Got %d", d.HP)
 	}
 
-
 	g, err = g.attack(target{pID: 0, id: 0, area: Permanent},
-					target{pID: 0, id: 0})
+		target{pID: 0, id: 0})
 	if err == nil {
 		t.Error("expected an error")
 	}
 
 	g, _ = g.endTurn()
-	if g.permanents[PermTarget{0, 0}].activated {
+	if g.Permanents[PermTarget{0, 0}].Activated {
 		t.Error("expected deactivation of perm")
 	}
 }
@@ -470,10 +476,9 @@ func Test_Cancelio(t *testing.T) {
 	g, _ := NewTestGame(2)
 	g = g.playCards(0, Dragonius, Cancelio)
 	g, _ = g.target(target{pID: 0, id: 0, area: Permanent})
-	if _, ok := g.permanents[PermTarget{0, 0}];
-		  ok == true {
-		fmt.Println(g.permanents)
-		t.Error("expected empty perm")	
+	if _, ok := g.Permanents[PermTarget{0, 0}]; ok == true {
+		fmt.Println(g.Permanents)
+		t.Error("expected empty perm")
 	}
 }
 
@@ -494,29 +499,29 @@ func Test_AngeliDustio(t *testing.T) {
 }
 
 func Test_Conjorius(t *testing.T) {
-	g, _ := NewTestGame(2) 
+	g, _ := NewTestGame(2)
 	g = g.playCards(0, Librarian, Librarian, Conjorius)
 	g = g.DoDmg(0, 0, 8)
 	g = g.DoDmg(0, 1, 8)
 	g = g.DoDmg(0, 1, 8)
-	if m := g.players[0].moreMana; m != 2 {
+	if m := g.Players[0].moreMana; m != 2 {
 		t.Errorf("Expected more mana to be 2, got %d", m)
 	}
 }
 
 func Test_Vitalius(t *testing.T) {
-	g, _ := NewTestGame(2) 
-	g = g.playCards(0, MindMage, Vitalius) 
+	g, _ := NewTestGame(2)
+	g = g.playCards(0, MindMage, Vitalius)
 	g, _ = g.target(target{pID: 0, id: 0})
 	g.checkHpIs(t, 10)
 	g, _ = g.attack(target{pID: 0, id: 0, atkNum: 1},
-	 			    target{pID: 0, id: 0}) 
+		target{pID: 0, id: 0})
 	g, _ = g.target(target{pID: 0, id: 0, area: Permanent})
 	g.checkHpIs(t, 5)
 }
 
 func Test_Librarius(t *testing.T) {
-	g, _ := NewTestGame(2) 
+	g, _ := NewTestGame(2)
 	g = g.InitFullDeck()
 
 	gWithLib, _ := NewTestGame(2)
@@ -524,13 +529,13 @@ func Test_Librarius(t *testing.T) {
 	gWithLib = gWithLib.playCards(0, Librarius)
 
 	if g.handSize() != gWithLib.handSize() {
-		t.Error("Expected equal handsizes")
+		t.Error("Expected equal Handsizes")
 	}
-	g, _ = g.endTurn()	
-	gWithLib, _ = gWithLib.endTurn()	
+	g, _ = g.endTurn()
+	gWithLib, _ = gWithLib.endTurn()
 
-	if gWithLib.handSize() != g.handSize() + 1 {
-		t.Errorf("Expected handsize to differ by 1, got %d and %d", gWithLib.handSize(), g.handSize() + 1)
+	if gWithLib.handSize() != g.handSize()+1 {
+		t.Errorf("Expected Handsize to differ by 1, got %d and %d", gWithLib.handSize(), g.handSize()+1)
 	}
 }
 
@@ -555,7 +560,7 @@ func Test_Bubublius(t *testing.T) {
 	g = g.playCards(0, PyrusBalio)
 	g, err := g.target(target{pID: 0, id: 0})
 	if err == nil {
-		fmt.Println(g.field[0][0].attached)
+		fmt.Println(g.Field[0][0].attached)
 		t.Error("expected an error got none")
 	}
 }
@@ -572,7 +577,7 @@ func Test_Meteorus(t *testing.T) {
 func Test_Armorius(t *testing.T) {
 	g, _ := NewTestGame(2)
 	g = g.playCards(0, Librarian, Armorius)
-	g, _ = g.target(target{pID: 0, id: 0})	
+	g, _ = g.target(target{pID: 0, id: 0})
 	g = g.DoDmg(0, 0, 1)
 	g.checkHpIs(t, 8)
 	g = g.DoDmg(0, 0, 3)
@@ -583,14 +588,17 @@ func Test_DracusPyrio(t *testing.T) {
 	g, _ := NewTestGame(2)
 	g = g.InitFullDeck()
 	g = g.playCards(0, Librarian)
-	g, err := g.play(0, Instant{name: "DracusPyrio"})
+	g, err := g.play(0, Instant{CName: DracusPyrio})
 	if err == nil {
 		t.Error("expected error got none")
 	}
 
 	g, _ = g.drawCard(0)
-	g, _ = g.play(0, Instant{name: "Dracus Pyrio"})
-	g, _ = g.target(target{pID: 0, id: 0}) 
+	g, _ = g.play(0, Instant{CName: DracusPyrio})
+	g, err = g.target(target{pID: 0, id: 0})
+	if err != nil {
+		t.Error(err)
+	}
 	g.checkHpIs(t, 1)
 }
 
@@ -602,16 +610,16 @@ func Test_Retrievio(t *testing.T) {
 		t.Error(err)
 	}
 	if g.handSize() != 1 {
-		t.Errorf("Expected hand size of 1, Got %d", g.handSize())
+		t.Errorf("Expected Hand size of 1, Got %d", g.handSize())
 	} else {
-		if c := g.players[0].hand[0]; c != Aquarius {
-			t.Errorf("Expected %v in hand, got %v",
-					 Aquarius, c) 
+		if c := g.Players[0].Hand[0]; c != Aquarius {
+			t.Errorf("Expected %v in Hand, got %v",
+				Aquarius, c)
 		}
 	}
-	_, ok := g.permanents[PermTarget{0, 0}]
+	_, ok := g.Permanents[PermTarget{0, 0}]
 	if ok {
-		t.Error("Permanent not removed")	
+		t.Error("Permanent not removed")
 	}
 }
 
@@ -619,12 +627,14 @@ func Test_Extractio(t *testing.T) {
 	g, _ := NewTestGame(2)
 	g = g.InitFullDeck()
 	g = g.playCards(0, Extractio)
-	g, err := g.target(target{id: 0, area: Deck})
+
+	g, err := g.target(target{id: int(Librarian), area: Deck})
 	if err != nil {
 		t.Error(err)
 	}
-	if g.players[0].hand[0] != Librarian {
-		t.Error("Librarian not in hand")
+
+	if g.Players[0].Hand[0] != Librarian {
+		t.Error("Librarian not in Hand")
 	}
 
 	g = g.playCards(0, Extractio)
@@ -633,4 +643,35 @@ func Test_Extractio(t *testing.T) {
 		t.Error("expected err")
 	}
 	g.checkHandSize(t, 1)
+}
+
+func Test_IsWizard(t *testing.T) {
+	cases := map[CardName]interface{} {
+		Librarian: true,
+		Conjurer: true,
+		Mortician: true,
+		Protectio: false,
+	}
+
+	for c, ex := range cases {
+		if ac := isWizard(cards, int(c)); ac != ex {
+			t.Errorf("case %s: expected %v got %v", c, ex, ac)
+		}
+	}
+}
+
+func Test_Shuffle(t *testing.T) {
+	g, _ := NewTestGame(2)
+
+	g.Players[0].deck = []CardName{} 
+	for i := 0; i < 3; i++ {
+		g.Players[0].deck = append(g.Players[0].deck, CardName(i))
+	}
+	//fmt.Println(g.Players[0].deck)
+	rand.Shuffle(3, func(i, j int) {
+		g.Players[0].deck[i], g.Players[0].deck[j] = 
+		
+		g.Players[0].deck[j], g.Players[0].deck[i]
+	})
+	//fmt.Println(g.Players[0].deck)
 }

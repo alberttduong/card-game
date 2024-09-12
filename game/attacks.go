@@ -1,29 +1,29 @@
-package game 
+package game
 
-var atkSideEffects = map[string]func (State, target, target) State {
-	"moreMana": moreMana, 
-	"draw1": draw1,
-	"disappear": disappear,
-	"disappear2": disappear2,
-	"splash": splash,
-	"megaSplash": megaSplash,
-	"protect": protect,
-	"reduce": reduce,
-	"nextDiscount": nextDiscount,  
-	"hurtAllies": hurtAllies,  
-	"revive": awaitAttacker,
-	"attackTwice": awaitAttacker,
-	"removePerm": awaitAttacker,
+var atkSideEffects = map[string]func(State, target, target) State{
+	"moreMana":     moreMana,
+	"draw1":        draw1,
+	"disappear":    disappear,
+	"disappear2":   disappear2,
+	"splash":       splash,
+	"megaSplash":   megaSplash,
+	"protect":      protect,
+	"reduce":       reduce,
+	"nextDiscount": nextDiscount,
+	"hurtAllies":   hurtAllies,
+	"revive":       awaitAttacker,
+	"attackTwice":  awaitAttacker,
+	"removePerm":   awaitAttacker,
 }
 
 func moreMana(s State, atkr, defr target) State {
-	s.players[atkr.pID].moreMana++ 
+	s.Players[atkr.pID].moreMana++
 	return s
 }
 
 func draw1(s State, atkr, defr target) State {
-	s, _ = s.drawCard(s.currentPlayer)
-	return s 
+	s, _ = s.drawCard(s.CurrentPlayer)
+	return s
 }
 
 func awaitAttacker(s State, atkr, defr target) State {
@@ -32,33 +32,33 @@ func awaitAttacker(s State, atkr, defr target) State {
 
 func disappear(s State, atkr, defr target) State {
 	atkrCard, _ := s.cardFromTarget(atkr)
-	s.players[s.currentPlayer].magicianHealth = atkrCard.hp
-	h := s.players[s.currentPlayer].hand
-	s.players[s.currentPlayer].hand = append(h, Magician)
+	s.Players[s.CurrentPlayer].magicianHealth = atkrCard.HP
+	h := s.Players[s.CurrentPlayer].Hand
+	s.Players[s.CurrentPlayer].Hand = append(h, Magician)
 	return s
 }
 
 func disappear2(s State, atkr, defr target) State {
 	atkrCard, _ := s.cardFromTarget(atkr)
-	newHp := atkrCard.hp - DisappearRecoil 
-	s.players[s.currentPlayer].magicianHealth = newHp
+	newHp := atkrCard.HP - DisappearRecoil
+	s.Players[s.CurrentPlayer].magicianHealth = newHp
 	if newHp > 0 {
-		h := s.players[s.currentPlayer].hand
-		s.players[s.currentPlayer].hand = append(h, Magician)
+		h := s.Players[s.CurrentPlayer].Hand
+		s.Players[s.CurrentPlayer].Hand = append(h, Magician)
 	}
 	return s
 }
 
 func splash(s State, atkr, defr target) State {
-	atkrCard, _ := s.cardFromTarget(atkr) 
-	dmg := s.baseDamage(atkr, atkrCard.atk0) 
+	atkrCard, _ := s.cardFromTarget(atkr)
+	dmg := s.baseDamage(atkr, atkrCard.Atk0)
 	s = s.DoDmg(int(defr.pID), (defr.id+1)%3, dmg)
 	s = s.DoDmg(int(defr.pID), (defr.id+2)%3, dmg)
 	return s
 }
 
 func megaSplash(s State, atkr, defr target) State {
-	for p := 0; p < s.numPlayers; p++ {
+	for p := 0; p < s.NumPlayers; p++ {
 		for i := 0; i < 3; i++ {
 			if p == int(atkr.pID) {
 				continue
@@ -96,7 +96,7 @@ func reduce(s State, atkr, defr target) State {
 }
 
 func nextDiscount(s State, atkr, defr target) State {
-	s.players[atkr.pID].discountSpell = true
+	s.Players[atkr.pID].discountSpell = true
 	return s
 }
 
@@ -115,20 +115,20 @@ func (s State) baseDamage(atkr target, atk Attack) int {
 	}
 
 	dmg := atk.Dmg
-	if atkrCard.attached == "Enhancius" {
-		dmg += EnhanciusBuff 
+	if atkrCard.attached == Enhancius {
+		dmg += EnhanciusBuff
 	}
 	switch atk.Name {
 	case "dmgPerCard":
 		// should be atkr id
-		dmg += len(s.players[s.currentPlayer].hand)/CardPerDmg 
+		dmg += len(s.Players[s.CurrentPlayer].Hand) / CardPerDmg
 	case "double":
 		areDead := func(c *Card) bool {
-				return c.hp < 1
-			}
+			return c.HP < 1
+		}
 		if s.allAllies(areDead, atkr) {
 			dmg *= 2
 		}
 	}
-	return dmg 
+	return dmg
 }
