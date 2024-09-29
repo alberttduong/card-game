@@ -10,6 +10,7 @@ var TargetPlayerErr = TargetErr{"Target's PlayerID is invalid"}
 var TargetWizardErr = TargetErr{"Target Wizard doesn't exist"}
 var TargetPermErr = TargetErr{"Perm Not Found"}
 var TargetDeckErr = TargetErr{"Card Not Found Deck"}
+var TargetDragonErr = ImplmtErr{"Target Dragon doesn't exist"}
 
 type ImplmtErr struct {
 	msg string
@@ -69,15 +70,22 @@ func (g State) checkTarget(t target) error {
 
 	switch t.area {
 	case Wizard:
-		if t.id < 0 ||
-			t.id >= len(g.Field[t.pID]) ||
-			(t.atkNum != 0 && t.atkNum != 1) {
+		if t.id < 0 || t.id >= len(g.Field[t.pID]) { 
 			return TargetWizardErr
 		}
 	case Permanent:
 		_, ok := g.Permanents[PermTarget{t.pID, t.id}]
 		if !ok {
 			return TargetPermErr
+		}
+	case Dragon:
+		_, ok := g.Permanents[PermTarget{t.pID, t.id}]
+		if !ok {
+			return TargetDragonErr
+		}
+		empty := Card{}
+		if g.Dragons[t.pID][t.id] == empty {
+			return TargetDragonErr
 		}
 	default:
 		return ImplmtErr{"Target area invalid"}

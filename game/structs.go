@@ -2,9 +2,10 @@ package game
 
 import (
 	"bytes"
+	//"slices"
 	"errors"
 	"fmt"
-	"log"
+	//"log"
 )
 
 type CardName int
@@ -75,6 +76,7 @@ const (
 	Wizard cardType = iota
 	Permanent
 	InstantSpell
+	Dragon
 	Deck
 )
 
@@ -144,6 +146,7 @@ func (i Instant) getCost() int {
 type playerID int
 
 type Player struct {
+	Name string
 	ID   playerID
 	Hand []CardName
 	deck []CardName
@@ -160,12 +163,20 @@ func InitPlayer(p playerID) Player {
 		deck:    []CardName{},
 		Hand:    make([]CardName, 0, 7),
 		manaCap: 1,
+		magicianHealth: 8,
 	}
 }
 
+//doesnt check outofbounds error
+func (s *State) SetPlayerName(p playerID, n string) {
+	s.Players[p].Name = n
+}
+
 func (p Player) String() string {
-	return fmt.Sprintf("Player %d\n\tDeck: %v\n\tHand: %v",
-		p.ID, p.deck, p.Hand)
+	if p.Name == "" {
+		return fmt.Sprintf("Player %d", p.ID)
+	}
+	return p.Name
 }
 
 type Await struct {
@@ -187,11 +198,47 @@ type State struct {
 
 	manaMax int
 	useMana bool
-	testing bool
+	Testing bool
 
 	awaiting Await
 	Logs     *bytes.Buffer
-	output   *log.Logger
+	//Output   *log.Logger
+
+	Output Output	
+}
+
+type Output struct {
+	Messages []Message
+}
+
+func (o *Output) Printf(format string, a ...any) {
+	o.Messages = append(o.Messages, Message{
+		Text: "-" + fmt.Sprintf(format, a...),
+	})
+}
+
+func (o *Output) PrivatePrint(p playerID, format string, a ...any) {
+	o.Messages = append(o.Messages, Message{
+		Text: fmt.Sprintf(format, a...),
+		Private: true,
+		Receiver: p,
+	})
+}
+
+func (o Output) Lines(p playerID) (res []string) {
+	for _, msg := range o.Messages {
+		if msg.Private && msg.Receiver != p {
+			continue
+		}
+		res = append(res, msg.Text)
+	}
+	return
+}
+
+type Message struct {
+	Text string
+	Private bool
+	Receiver playerID
 }
 
 func initArea[T Playable](pType T, numPlayers int) [MaxPlayers][]T {
@@ -210,7 +257,7 @@ func initArea[T Playable](pType T, numPlayers int) [MaxPlayers][]T {
 	return area
 }
 
-func initDragons(players int) [MaxPlayers][]Card {
+func initDragons() [MaxPlayers][]Card {
 	var d [MaxPlayers][]Card
 	for i := 0; i < MaxPlayers; i++ {
 		d[i] = make([]Card, MaxPermLen)
@@ -222,23 +269,24 @@ func NewGame(players int) (State, error) {
 	if players < 2 || players > MaxPlayers {
 		return State{}, errors.New("Invalid number of players")
 	}
-	var buf bytes.Buffer
 
 	s := State{
 		Players: [MaxPlayers]Player{
 			InitPlayer(0),
 			InitPlayer(1),
 		},
-		testing: false,
+		Testing: false,
 		NumPlayers:    players,
 		CurrentPlayer: 0,
 		Field:         initArea(Card{}, players),
-		Dragons:       initDragons(players),
+		Dragons:       initDragons(),
 		Permanents:    make(map[PermTarget]Perm),
 		manaMax:       6,
-		Logs:          &buf,
-		output:        log.New(&buf, "-", log.Lmsgprefix),
+		Output: Output{},
 	}
+
+	s.SetPlayerName(0, "Alice")
+	s.SetPlayerName(1, "Bob")
 
 	return s, nil
 }
@@ -248,7 +296,7 @@ func NewTestGame(players int) (State, error) {
 	if err != nil {
 		return State{}, err
 	}
-	s.testing = true
+	s.Testing = true
 	return s.startTurn(), nil
 }
 
@@ -347,5 +395,6 @@ func (s State) removePerm(pt PermTarget) (State, error) {
 		s = s.doRawDmg(c, 2)
 	}
 
+	s.Output.Printf("Removed %s", p.CName)
 	return s, nil
 }

@@ -1,0 +1,245 @@
+[
+	{
+		"name": "Librarian",
+		"type": "wizard",
+		"hp": 8,
+		"atk1": {
+			"name": "draw1",
+			"desc": "Draw 1 card",
+			"dmg": 1
+		},
+		"atk2": {
+			"name": "dmgPerCard",
+			"desc": "For every 2 cards in your hand, do 2 damage",
+			"dmg": 0
+		}
+	},
+	{
+		"name": "Magician",
+		"type": "wizard",
+		"hp": 8,
+		"atk1": {
+			"name": "disappear",
+			"desc": "Put this card in your hand",
+			"dmg": 2
+		},
+		"atk2": {
+			"name": "disappear2",
+			"desc": "Put this card in your hand.  Do 2 damage to this",
+			"dmg": 6
+		}
+	},
+	{
+		"name": "Shieldmancer",
+		"type": "wizard",
+		"hp": 8,
+		"atk1": {
+			"name": "protect",
+			"desc": "Allies are protected until your next turn",
+			"dmg": 1
+		},
+		"atk2": {
+			"name": "reduce",
+			"desc": "Reduce damage to allies by 1 until your next turn",
+			"dmg": 3
+		}
+	},
+	{
+		"name": "Mind Mage",
+		"type": "wizard",
+		"hp": 8,
+		"atk1": {
+			"name": "bypass",
+			"desc": "This attack bypasses all effects",
+			"dmg": 2
+		},
+		"atk2": {
+			"name": "removePerm",
+			"desc": "Remove a permanent",
+			"dmg": 3
+		}
+	},
+	{
+		"name": "Angel",
+		"type": "wizard",
+		"hp": 8,
+		"atk1": {
+			"name": "heal",
+			"desc": "Heal 2",
+			"dmg": -2
+		},
+		"atk2": {
+			"name": "revive",
+			"desc": "Revive an ally and kill this",
+			"dmg": 3
+		}
+	},
+	{
+		"name": "Pyromancer",
+		"type": "wizard",
+		"hp": 8,
+		"atk1": {
+			"name": "splash",
+			"desc": "Attach target wizard's allies",
+			"dmg": 1
+		},
+		"atk2": {
+			"name": "megaSplash",
+			"desc": "Attack all opposing wizards for 1 damage",
+			"dmg": 0
+		}
+	},
+	{
+		"name": "Blood Eater",
+		"type": "wizard",
+		"hp": 8,
+		"atk1": {
+			"name": "attackTwice",
+			"desc": "Attack twice",
+			"dmg": 1
+		},
+		"atk2": {
+			"name": "frenzy",
+			"desc": "If this kills a wizard, attack again",
+			"dmg": 4
+		}
+	},
+	{
+		"name": "Conjurer",
+		"type": "wizard",
+		"hp": 8,
+		"atk1": {
+			"name": "moreMana",
+			"desc": "On your next turn, gain 1 extra mana",
+			"dmg": 1
+		},
+		"atk2": {
+			"name": "nextDiscount",
+			"desc": "The next spell you cast this turn costs 1 less",
+			"dmg": 3
+		}
+	},
+	{
+		"name": "Mortician",
+		"type": "wizard",
+		"hp": 8,
+		"atk1": {
+			"name": "hurtAllies",
+			"desc": "Do 1 damage to all your allies",
+			"dmg": 4
+		},
+		"atk2": {
+			"name": "double",
+			"desc": "If this is your last wizard, do double damage",
+			"dmg": 3
+		}
+	},
+	{
+		"name": "Protectio",
+		"desc": "Target wizard can't be attacked until their next turn",
+		"type": "instant",
+		"hp": 5
+	},
+	{
+		"name": "Pyrus Balio",
+		"desc": "Do 1 damage",
+		"type": "instant",
+		"hp": 1
+	},
+	{
+		"name": "Mortius",
+		"desc": "When the attached wizard is killed, do 2 damage to the attacker",
+		"type": "perm",
+		"hp": 1
+	},
+	{
+		"name": "Enhancius",
+		"desc": "Attached wizard's spells do 1 more damage",
+		"type": "perm",
+		"hp": 3
+	},
+	{
+		"name": "Dragonius",
+		"desc": "This has 3 HP and can be targeted. Once per turn, do 3 damage",
+		"type": "perm",
+		"hp": 5
+	},
+	{
+		"name": "Cancelio",
+		"desc": "Remove a permanent",
+		"type": "instant",
+		"hp": 3
+	},
+	{
+		"name": "Conjorius",
+		"desc": "When a wizard dies, gain one mana on your next turn",
+		"type": "perm",
+		"hp": 3
+	},
+	{
+		"name": "Angeli Dustio",
+		"desc": "Heal 2",
+		"type": "instant",
+		"hp": 3
+	},
+	{
+		"name": "Vitalius",
+		"desc": "Attached wizard has +2 HP",
+		"type": "perm",
+		"hp": 1
+	},
+	{
+		"name": "Dralio",
+		"desc": "Draw 2 cards",
+		"type": "instant",
+		"hp": 2
+	},
+	{
+		"name": "Librarius",
+		"desc": "All players draw an extra card at the start of their turn",
+		"type": "perm",
+		"hp": 3
+	},
+	{
+		"name": "Aquarius",
+		"desc": "Increase mana cap for all players by 1",
+		"type": "perm",
+		"hp": 3
+	},
+	{
+		"name": "Bubublius",
+		"desc": "Target wizard can't be targeted by spells",
+		"type": "perm",
+		"hp": 1
+	},
+	{
+		"name": "Meteorus",
+		"desc": "Once per turn, do 1 damage to a random target",
+		"type": "perm",
+		"hp": 1
+	},
+	{
+		"name": "Armorius",
+		"desc": "Reduce damage done to target wizard by 1",
+		"type": "perm",
+		"hp": 3
+	},
+	{
+		"name": "Dracus Pyrio",
+		"desc": "Discard all cards in your hand and do 7 damage",
+		"type": "instant",
+		"hp": 5
+	},
+	{
+		"name": "Retrievio",
+		"desc": "Put one of your perms back in your hand",
+		"type": "instant",
+		"hp": 1
+	},
+	{
+		"name": "Extractio",
+		"desc": "Look for a card in your deck and put it in your hand",
+		"type": "instant",
+		"hp": 1
+	}
+]

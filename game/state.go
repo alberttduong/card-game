@@ -14,7 +14,7 @@ const (
 	DisappearRecoil  = 2
 	AllyRecoil       = 1
 	PyrusBalioDmg    = 1
-	EnhanciusBuff    = 2
+	EnhanciusBuff    = 1
 	DragoniusDmg     = 3
 	AngeliDustioHeal = 2
 	VitaliusBuff     = 2
@@ -63,13 +63,13 @@ func (s State) startTurn() State {
 		(*field)[i].protected = false
 	}
 
-	s.output.Println(fmt.Sprintf("Player %v's turn", s.CurrentPlayer))
-	if !s.testing {
+	s.Output.Printf("Player %v's turn", s.CurrentPlayer)
+	if !s.Testing {
 		s = s.drawCards(p.ID, 1)
 	}
 
 	if numLib := s.numOfPerms(Librarius); numLib > 0 {
-		s.output.Println("Librarius activated")
+		s.Output.Printf("Librarius activated")
 		s = s.drawCards(p.ID, numLib)
 	}
 
@@ -124,6 +124,7 @@ func (s State) playPerm(player playerID, p Perm) (State, error) {
 	default:
 		return s, errors.New("unexpected perm")
 	}
+	s.Output.Printf("%s played %s", s.Players[s.CurrentPlayer], p.CName)
 	return s, nil
 }
 
@@ -134,11 +135,16 @@ func (s State) play(p playerID, c Playable) (State, error) {
 		if len(s.Field[p]) == MaxFieldLen {
 			return s, errors.New("Field is at max capacity")
 		}
-		s.Field[p] = append(s.Field[p], c.(Card))
+
+		card := c.(Card)
+		if card.CName == Magician {
+			card.HP = s.Players[p].magicianHealth
+		}
+		s.Field[p] = append(s.Field[p], card)
 		return s, nil
 	}
 
-	if s.testing == false {
+	if s.Testing == false {
 		cost := c.getCost()
 		if s.Players[p].discountSpell {
 			cost--
@@ -161,14 +167,22 @@ func (s State) play(p playerID, c Playable) (State, error) {
 
 func (s State) drawCards(p playerID, n int) State {
 	drawn := 0
+	var err error
 	for range n {
-		newS, err := s.drawCard(p)
+		s, err = s.drawCard(p)
 		if err == nil {
 			drawn++
 		}
-		s = newS
 	}
-	s.output.Printf("Player %d drew %d cards\n", p, drawn)
+		
+	if drawn == 0 {
+		s.Output.Printf("%s couldn't draw from their empty deck", s.Players[p])
+	} else if drawn < n {
+		s.Output.Printf("%s drew %d card(s), their deck is now empty", s.Players[p], drawn)
+	} else {
+		s.Output.Printf("%s drew %d card(s)", s.Players[p], drawn)
+	}
+
 	return s
 }
 
@@ -176,7 +190,6 @@ func (s State) drawCard(p playerID) (State, error) {
 	player := &s.Players[p]
 	d := player.deck
 	if len(d) == 0 {
-		//s.output.Println("Deck empty")
 		return s, errors.New("Deck empty")
 	}
 	player.Hand = append(player.Hand, d[len(d)-1])
@@ -228,15 +241,36 @@ func (s State) activatePerm(pt PermTarget) (State, error) {
 	p.Activated = true
 	s.Permanents[pt] = p
 
-	if p.CName == Meteorus {
+	switch p.CName { 
+	case Meteorus:
 		t, err := s.randomTarget()
 		if err != nil {
 			return s, err
 		}
 
+		s.Output.Printf("%s did %d damage to %s's %s",
+			Meteorus, MeteorusDmg, s.Players[t.pID], s.Field[t.pID][t.id].CName)
 		return s.DoDmg(int(t.pID), t.id, MeteorusDmg), nil
+	case Dragonius:
+		s.awaiting = Await{
+			isTrue: true,
+			atkr: target{area: Permanent, pID: pt.pID, id: pt.id},
+		}
+		return s, nil	
 	}
+
 	return s, errors.New("not a valid perm name")
+}
+
+func (s State) showDeck(p playerID) State {
+	if len(s.Players[p].deck) == 0 {
+		s.Output.Printf("Your deck is empty")
+	}
+	for i, card := range s.Players[p].deck {
+		//s.Output.Printf("%d: %s", i, card.String()) 
+		s.Output.PrivatePrint(p, "%d: %s", i, card.String()) 
+	}
+	return s
 }
 
 func (s State) attack(atkr, defr target) (State, error) {
@@ -252,19 +286,14 @@ func (s State) attack(atkr, defr target) (State, error) {
 
 	atk, err := atkrCard.atk(atkr.atkNum)
 	if errors.Is(err, DragoniusAtkErr{}) {
-		d := PermTarget{atkr.pID, atkr.id}
-		dragon, ok := s.Permanents[d]
-		if !ok {
-			return s, errors.New("couldnt find dragon")
+		d := PermTarget{atkr.pID, atkr.id} 
+		dr := s.Permanents[d]
+		if dr.Activated {
+			return s, errors.New("Dragonius can only attack once per turn")
 		}
-		if dragon.Activated {
-			return s, errors.New("attack with dragon only once per turn")
-		}
-		dragon.Activated = true
-		s.Permanents[d] = dragon
-		return s.setAwait(atkr), nil
-	}
-	if err != nil {
+		dr.Activated = true
+		s.Permanents[d] = dr
+	} else if err != nil {
 		return s, err
 	}
 
@@ -281,18 +310,29 @@ func (s State) attack(atkr, defr target) (State, error) {
 	}
 
 	defrWasAlive := defrCard.HP > 0
-
 	s = s.DoDmgToCard(defrCard, dmg)
+	s.Output.Printf("%s's %s attacked %s's %s", 
+		s.Players[atkr.pID],
+		atkrCard.CName.String(),
+		s.Players[defr.pID],
+		defrCard.CName.String())
 
 	if defrWasAlive && defrCard.HP == 0 {
 		if atk.Name == "frenzy" {
+			s.Output.Printf("%s can attack again", atkrCard.CName)
 			s = s.setAwait(atkr)
 		}
 		if defrCard.attached == Mortius {
+			s.Output.Printf("%s's Mortius attacked %s", defrCard.CName, atkrCard.CName)
 			s = s.DoDmgToCard(atkrCard, 2)
 		}
 	}
 
+	afterEffect, ok := SideEffectsAfterAtk[atk.Name]
+	if ok {
+		s = afterEffect(s, atkr, defr)
+	}
+	
 	return s, nil
 }
 
@@ -357,8 +397,12 @@ func (g State) doRawDmg(c *Card, dmg int) State {
 	}
 
 	if c.HP > 0 && newHp == 0 {
-		for i, _ := range g.Players {
-			g.Players[i].moreMana += g.numOfPermsOf(playerID(i), Conjorius)
+		for i := range g.Players {
+			n := g.numOfPermsOf(playerID(i), Conjorius)
+			for range n {
+				g.Output.Printf("Conjorius gave one mana to %s", g.Players[i].Name) 
+			}
+  			g.Players[i].moreMana += n 
 		}
 	}
 	c.HP = newHp
@@ -412,9 +456,22 @@ func (s State) spellTarget(defr target) (State, error) {
 
 	return func() (State, error) {
 		s, e := spell(s, defr)
-		s = s.cancelAwait()
+		if e == nil {
+			s = s.cancelAwait()
+		}
 		return s, e
 	}()
+}
+
+func (s State) printCardsInDeck() State {
+	cards := map[CardName]bool{}
+	for _, cn := range s.Players[s.CurrentPlayer].deck {
+		cards[cn] = true	
+	}
+	for c := range cards {
+		s.Output.PrivatePrint(s.CurrentPlayer, "Id: %d - %s", c, c)
+	}
+	return s
 }
 
 func (s State) target(defr target) (State, error) {
@@ -448,6 +505,7 @@ func (s State) target(defr target) (State, error) {
 			return s, errors.New("invalid target")
 		}
 		s = s.cancelAwait()
+		s.Output.Printf("Dragonius attacked %s", defrCard.CName)
 		return s.DoDmgToCard(defrCard, DragoniusDmg), nil
 	}
 	if err != nil {
@@ -457,6 +515,7 @@ func (s State) target(defr target) (State, error) {
 	if targetType == Permanent {
 		switch atk.Name {
 		case "removePerm":
+			s = s.cancelAwait()	
 			return s.removePerm(PermTarget{defr.pID, defr.id})
 		}
 		return s, errors.New("Unexpected attack")
@@ -467,20 +526,26 @@ func (s State) target(defr target) (State, error) {
 		atkrCard.HP = 0
 		defrCard.HP = MaxHp
 	case "attackTwice":
-		s, err := s.attack(atkr, defr)
+		s, err := s.attack(
+			target{pID: atkr.pID, id: atkr.id, atkNum: 2},
+			defr)
 		s = s.cancelAwait()
 		return s, err
 	case "frenzy":
 		defrWasAlive := defrCard.HP > 0
 
-		s, err := s.attack(atkr, defr)
+		newS, err := s.attack(atkr, defr)
+
 		if err != nil {
-			return s, nil
+			return s, nil 
 		}
 
 		if defrWasAlive && defrCard.HP == 0 {
-			return s, nil
+			return newS, nil
 		}
+
+		newS = newS.cancelAwait() 
+		return newS, nil
 	}
 
 	s = s.cancelAwait()
@@ -505,7 +570,7 @@ func (s State) awaitSpell(spell Playable) State {
 }
 
 func (s State) AwaitStatus() string {
-	return fmt.Sprintf("%t %s", s.awaiting.isTrue, s.awaiting.spellName.String()) 
+	return fmt.Sprintf("%t %s Atkr: %v", s.awaiting.isTrue, s.awaiting.spellName.String(), s.awaiting.atkr) 
 }
 
 func (s State) awaitPerm(pt PermTarget) State {
@@ -552,29 +617,37 @@ func (c Card) atk(n int) (Attack, error) {
 	if c.CName == Dragonius {
 		return Attack{}, DragoniusAtkErr{}
 	}
-
-	if n != 0 && n != 1 {
-		panic("invalid atk number")
-	}
-	if n == 1 {
+	switch n { 
+	case 0:
+		return c.Atk0, nil
+	case 1:
 		return c.Atk1, nil
+	case 2:
+		// bloodeater
+		a := c.Atk0
+		a.Name = ""
+		return a, nil 
 	}
-	return c.Atk0, nil
+	return Attack{}, errors.New("Invalid attack num") 
 }
 
 type PublicPermID struct {
 	PID, ID int
 }
 
+func (p PublicPermID) String() string {
+	return fmt.Sprintf("%d %d", p.PID, p.ID)
+}
+
 // In order of players
 func (s State) SortedPerms() [][]PublicPermID {
 	keys := make([][]PublicPermID, s.NumPlayers)
 
-	for k, _ := range s.Permanents {
+	for k := range s.Permanents {
 		keys[k.pID] = append(keys[k.pID],
 			PublicPermID{int(k.pID), k.id})
 	}
-	for i, _ := range keys {
+	for i := range keys {
 		slices.SortStableFunc(keys[i], func(a, b PublicPermID) int {
 			return a.ID - b.ID
 		})

@@ -51,7 +51,7 @@ type Screen struct {
 
 // TODO
 func (s Screen) InitGame() (game.State, error) {
-	g, err := game.NewGame(2)
+	g, err := game.NewTestGame(2)
 	if err != nil {
 		return g, err
 	}
@@ -75,7 +75,7 @@ func (s Screen) InitGame() (game.State, error) {
 	return g.Start(s.Cards), nil
 }
 
-func NewScreen(cards []game.Cdata, game game.State) *Screen {
+func NewScreen(cards []game.Cdata) *Screen {
 	s := Screen{
 		Cards: cards,
 		cursor: &Cursor{},
@@ -83,6 +83,15 @@ func NewScreen(cards []game.Cdata, game game.State) *Screen {
 		selected: CardPos{-1, -1},
 	}
 	return &s
+}
+
+func (s Screen) targetString() string {
+	numWizs := len(s.Game.Field[s.cursor.SelectedY()])
+	if s.cursor.Selected.x >= numWizs {
+		return fmt.Sprintf("%d %s", game.Permanent, s.Perms[s.cursor.SelectedY()][s.cursor.Selected.x - numWizs])
+	}
+
+	return fmt.Sprintf("%d %s", game.Wizard, s.cursor.TargetStr())
 }
 
 func (s *Screen) HandleEvent(ev termbox.Event) error {
@@ -94,10 +103,12 @@ func (s *Screen) HandleEvent(ev termbox.Event) error {
 		case 'i':
 			s.Inp.Active = true
 		case 'n':
-			s.command = fmt.Sprintf("attack %s 0 ", s.cursor.String())
+			s.command = fmt.Sprintf("atk %s 0 ", s.targetString()) 
+			//s.command = fmt.Sprintf("attack %s 0 ", s.cursor.TargetStr())
 			s.selected = s.cursor.Selected
 		case 'm':
-			s.command = fmt.Sprintf("attack %s 1 ", s.cursor.String())
+			s.command = fmt.Sprintf("attack %s 1 ", s.cursor.TargetStr())
+			s.selected = s.cursor.Selected
 		case 'p':
 			s.Inp.Reset()
 			s.Execute("end")
@@ -112,14 +123,27 @@ func (s *Screen) HandleEvent(ev termbox.Event) error {
 				break
 			}
 
-			if strings.HasPrefix(s.command, "attack") {
-				s.Execute(s.command + s.cursor.String())
+			numWizs := len(s.Game.Field[s.cursor.SelectedY()])
+			if strings.HasPrefix(s.command, "atk") {
+				s.Execute(s.command + s.targetString())
 				s.command = ""
 				s.resetSelected()
 				break
 			}
 
- 			s.Execute(fmt.Sprintf("target %s", s.cursor.String()))
+			if strings.HasPrefix(s.command, "attack") {
+				s.Execute(s.command + s.cursor.TargetStr())
+				s.command = ""
+				s.resetSelected()
+				break
+			}
+
+			if s.cursor.Selected.x >= numWizs {
+ 				s.Execute(fmt.Sprintf("targetperm %s",
+					s.Perms[s.cursor.SelectedY()][s.cursor.Selected.x - numWizs]))
+				break
+			}
+ 			s.Execute(fmt.Sprintf("target %s", s.cursor.TargetStr()))
 		}
 		
 
@@ -248,7 +272,7 @@ func view(title string, content *TextWrapIter) []string {
 
 func (s Screen) ChatView() []string {
 	content := NewTextWrapIter(CardViewWidth) 
-	lines := strings.Split(s.Game.Logs.String(), "\n")
+	lines := s.Game.Output.Lines(s.Game.CurrentPlayer)
 	for _, str := range lines {
 		content.AddParagraph(str)
 	}
@@ -308,8 +332,18 @@ func (s *Screen) Redraw() {
 	render(scrn)
 }
 
+
+func (s Screen) name() string {
+	return s.nameOf(int(s.Game.CurrentPlayer)) 
+}
+
+func (s Screen) nameOf(i int) string {
+	return fmt.Sprintf("(%s)", s.Game.Players[i])
+}
+
 func (s Screen) hand() []string {
-	text := fieldHeader("Your Hand", fmt.Sprintf("[Player%d]", s.Game.CurrentPlayer))
+	text := fieldHeader("Your Hand", s.name())
+				
 	for i, r := range s.Game.Players[s.Game.CurrentPlayer].Hand {
 		rightText := cardNameImg(s.Cards, r)
 		if s.cursor.IsSelected(i, s.Game.NumPlayers) {
@@ -322,7 +356,7 @@ func (s Screen) hand() []string {
 }
 
 func (s Screen) field(p int) []string {
-	text := fieldHeader("Field", fmt.Sprintf("[Player%d]", p))
+	text := fieldHeader("Field", s.nameOf(p))
 
 	i := 0
 	for _, r := range s.Game.Field[p] {
@@ -353,13 +387,16 @@ func (s Screen) field(p int) []string {
 	return text
 }
 
+//debug
 func (s Screen) gameHeader() []string {
 	text := make([]string, 4) 
 	text[1] = fmt.Sprintf("%3s", GameTitle)
-	text[2] = fmt.Sprintf("Current Player: %d | Mana: %d", 
+	text[2] = fmt.Sprintf("Current Player: %d | Mana: %d | TestMode: %t", 
 		s.Game.CurrentPlayer,
-		s.Game.Mana)  
-	text[3] = fmt.Sprintf("%s", s.Game.AwaitStatus())
+		s.Game.Mana,
+		s.Game.Testing,
+	)  
+	//text[3] = fmt.Sprintf("%s", s.Game.AwaitStatus())
 	
 	return text
 }

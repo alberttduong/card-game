@@ -40,6 +40,7 @@ func InitScreen(cards []game.Cdata) *MainScreen {
 		CurrentMode: DefaultMode,
 		Start: NewStartScreen(),
 		Deck: NewDeckBuilder(cards),
+		Game: NewScreen(cards), 
 	}
 	m.SetMode(DefaultMode)
 	return &m
@@ -131,8 +132,13 @@ type Cursor struct {
 	maxX int
 }
 
-func (c Cursor) String() string {
-	return fmt.Sprintf("%d %d", c.Selected.x, c.Selected.y)
+func (c Cursor) TargetPermStr(numWizs int) string {
+	return fmt.Sprintf("%d %d", c.Selected.y, c.Selected.x - numWizs)
+}
+
+func (c Cursor) TargetStr() string {
+	return fmt.Sprintf("%d %d", c.Selected.y, c.Selected.x)
+	//return fmt.Sprintf("%d %d", c.Selected.y, c.Selected.x)
 }
 
 func (s *Cursor) updateX() {
@@ -147,6 +153,13 @@ func (s *Cursor) updateX() {
 func (s Cursor) IsSelected(x, y int) bool {
 	return s.Selected.x == x && 
 	       s.Coords[s.Selected.y].realRow == y
+}
+
+func (s Cursor) SelectedY() int {
+	if s.Selected.y < 0 || s.Selected.y >= len(s.Coords) {
+		return -1
+	}
+	return s.Coords[s.Selected.y].realRow
 }
 
 func (s Cursor) SelectedYis(y int) bool {
@@ -219,8 +232,8 @@ func (s *StartScreen) HandleEvent(ev termbox.Event) error {
 func NewStartScreen() *StartScreen {
 	return &StartScreen {
 		cursor: &Cursor{Coords: []Coord{
-			Coord{0, 1},
-			Coord{1, 1},
+			{0, 1},
+			{1, 1},
 		}}, 
 	}
 }

@@ -208,8 +208,10 @@ func Test_Magician(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	g.checkAllyHpIs(t, 7)
 
-	g = g.doAtk(1)
+	g, _ = g.attack(target{pID: 0, id: 1, atkNum: 1},
+					target{pID: 0, id: 0})	
 	if h := g.Players[0].magicianHealth; h != 5 {
 		t.Errorf("expected.HP 5 got %d", h)
 	}
@@ -401,7 +403,7 @@ func Test_Protectio(t *testing.T) {
 
 func Test_Mortius(t *testing.T) {
 	g, _ := NewTestGame(2)
-	g = g.playCards(0, Magician, Librarian, Mortius)
+	g = g.playCards(0, Bloodeater, Librarian, Mortius)
 	g, _ = g.target(target{pID: 0, id: 1})
 	g = g.doAtk(1).doAtk(1)
 	if g.Field[0][1].attached != Mortius {
@@ -415,7 +417,7 @@ func Test_Enhancius(t *testing.T) {
 	g = g.playCards(0, Librarian, Shieldmancer, Enhancius)
 	g, _ = g.target(target{pID: 0, id: 0})
 	g = g.doAtk(0)
-	g.checkAllyHpIs(t, 5)
+	g.checkAllyHpIs(t, 6)
 }
 
 func Test_Dragonius(t *testing.T) {

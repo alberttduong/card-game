@@ -4,7 +4,6 @@ import (
 	"github.com/alberttduong/card-game/game"
 	"github.com/alberttduong/card-game/tui"
 	"github.com/nsf/termbox-go"
-	"log"
 	_ "embed"
 )
 
@@ -19,16 +18,17 @@ func main() {
     defer termbox.Close()
 
 
+	/*
 	g, err := game.NewTestGame(2)
 	if err != nil {
 		log.Fatal(err)
 	}
+	*/
 
 	cards := game.GetCardData(data) 	
 
-	//screen := tui.NewDeckBuilder(cards)
 	screen := tui.InitScreen(cards)
-	screen.Game = tui.NewScreen(cards, g)
+	//screen.Game = tui.NewScreen(cards, g)
 
 	screen.Redraw()
 

@@ -47,6 +47,19 @@ func (g State) Execute(cards []Cdata, args ...string) (State, error) {
 		}
 
 		return g, nil
+	case "targetperm":
+		nums, err := convertArgs(2, args[1:]...)
+		if err != nil {
+			return g, err
+		}
+
+		g, err = g.target(target{area: Permanent, 
+					pID: playerID(nums[0]), id: nums[1]})
+		if err != nil {
+			return g, err
+		}
+
+		return g, nil
 	case "create":
 		nums, err := convertArgs(1, args[1:]...)
 		if err != nil {
@@ -92,6 +105,30 @@ func (g State) Execute(cards []Cdata, args ...string) (State, error) {
 		}
 
 		return newG, nil
+	case "atk":
+		nums, err := convertArgs(7, args[1:]...)
+		if err != nil {
+			return g, err
+		}
+
+		newG, err := g.attack(
+			target{
+				area:   cardType(nums[0]),
+				pID:    playerID(nums[1]),
+				id:     nums[2],
+				atkNum: nums[3],
+			},
+			target{
+				area:   cardType(nums[4]),
+				pID: playerID(nums[5]),
+				id:  nums[6],
+			})
+
+		if err != nil {
+			return g, err
+		}
+
+		return newG, nil
 	case "play":
 		nums, err := convertArgs(1, args[1:]...)
 		if err != nil {
@@ -122,6 +159,17 @@ func (g State) Execute(cards []Cdata, args ...string) (State, error) {
 			return g, err
 		}
 		return g, nil
+	case "showdeck":
+		return g.showDeck(g.CurrentPlayer), nil
+	case "activate":
+		//todo
+		nums, err := convertArgs(2, args[1:]...)
+		if err != nil {
+			return g, err
+		}
+
+		g, err = g.activatePerm(PermTarget{playerID(nums[0]), nums[1]})
+		return g, err
 	case "end":
 		g, err := g.endTurn()
 		if err != nil {
